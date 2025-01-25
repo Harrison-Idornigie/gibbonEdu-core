@@ -1,0 +1,17 @@
+{
+    "name": "gibbon/api",
+    "description": "API Module for Gibbon",
+    "type": "gibbon-module",
+    "require": {
+        "php": ">=7.4",
+        "league/oauth2-server": "^8.4",
+        "lcobucci/jwt": "^4.3",
+        "nyholm/psr7": "^1.8",
+        "nyholm/psr7-server": "^1.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Gibbon\\Module\\API\\": "src/"
+        }
+    }
+}

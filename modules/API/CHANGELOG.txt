@@ -1,0 +1,10 @@
+CHANGELOG
+=========
+v0.1.00
+-------
+First release
+- Added API key management
+- Added API settings
+- Added basic API endpoint structure
+- Added IP restriction capability
+- Added authentication system

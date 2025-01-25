@@ -55,6 +55,13 @@
 !/Tracking/**
 !/User Admin
 !/User Admin/**
+!/CustomNotification
+!/CustomNotification/**
+!/Free Learning
+!/Free Learning/**
+!/API
+!/API/**
+!/User Admin/**
 
 # black list some files and folders
 # in the module folders

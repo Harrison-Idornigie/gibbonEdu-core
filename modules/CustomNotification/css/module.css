@@ -1,0 +1,62 @@
+/*
+Gibbon: the flexible, open school platform
+Copyright 2010, Gibbon Foundation
+Gibbon, Gibbon Education Ltd. (Hong Kong)
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <http://www.gnu.org/licenses/>.
+*/
+
+.notification-item {
+    @apply flex items-center p-4 bg-white border rounded shadow-sm;
+}
+
+.notification-item.unread {
+    @apply bg-blue-50;
+}
+
+.notification-meta {
+    @apply text-xs text-gray-600;
+}
+
+.notification-actions {
+    @apply flex items-center space-x-2;
+}
+
+.subscription-list {
+    @apply grid gap-4;
+}
+
+.subscription-item {
+    @apply p-4 bg-white border rounded;
+}
+
+.subscription-header {
+    @apply flex justify-between items-center mb-2;
+}
+
+.subscription-type {
+    @apply text-sm font-medium;
+}
+
+.subscription-status {
+    @apply px-2 py-1 text-xs rounded;
+}
+
+.subscription-status.active {
+    @apply bg-green-100 text-green-800;
+}
+
+.subscription-status.inactive {
+    @apply bg-gray-100 text-gray-800;
+}

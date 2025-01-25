@@ -1,0 +1,15 @@
+{% extends "components/form.twig.html" %}
+
+{% block header %}
+    {% if form.getTitle %}
+        <h2>{{ form.getTitle }}</h2>
+    {% endif %}
+{% endblock %}
+
+{% block form %}
+    {% if form.getDescription %}
+        <div class="message">{{ form.getDescription }}</div>
+    {% endif %}
+
+    {{ parent() }}
+{% endblock %}
