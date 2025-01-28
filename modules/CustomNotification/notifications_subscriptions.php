@@ -34,7 +34,25 @@ $eventTypes = $result->fetchAll(\PDO::FETCH_KEY_PAIR);
 // Get list of all students this user can subscribe to
 $students = [];
 $role = $session->get('gibbonRoleIDCurrent');
-if ($role == 4) { // Parent
+
+// Get role info
+$data = ['gibbonRoleID' => $role];
+$sql = "SELECT category FROM gibbonRole WHERE gibbonRoleID=:gibbonRoleID";
+$roleCategory = $pdo->selectOne($sql, $data);
+
+if ($roleCategory == 'Staff') {
+    // Staff can see all active students
+    $sql = "SELECT gibbonPerson.gibbonPersonID, gibbonPerson.surname, gibbonPerson.preferredName 
+            FROM gibbonPerson 
+            JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
+            WHERE gibbonPerson.status='Full'
+            AND gibbonStudentEnrolment.gibbonSchoolYearID=(SELECT gibbonSchoolYearID FROM gibbonSchoolYear WHERE status='Current')
+            ORDER BY gibbonPerson.surname, gibbonPerson.preferredName";
+    $result = $pdo->select($sql);
+    while ($student = $result->fetch()) {
+        $students[$student['gibbonPersonID']] = Format::name('', $student['preferredName'], $student['surname'], 'Student');
+    }
+} elseif ($role == 4) { // Parent
     $data = ['gibbonPersonID' => $session->get('gibbonPersonID')];
     $sql = "SELECT DISTINCT student.gibbonPersonID, student.surname, student.preferredName 
             FROM gibbonFamilyChild 
@@ -47,6 +65,11 @@ if ($role == 4) { // Parent
     $result = $pdo->select($sql, $data);
     while ($student = $result->fetch()) {
         $students[$student['gibbonPersonID']] = Format::name('', $student['preferredName'], $student['surname'], 'Student');
+    }
+} elseif ($role == 3) { // Student
+    // Students can only subscribe to their own notifications
+    if ($settingGateway->getSettingByScope('CustomNotification', 'enableStudentAttendanceNotifications') == 'Y') {
+        $students[$session->get('gibbonPersonID')] = __('My Notifications');
     }
 }
 
@@ -74,6 +97,18 @@ if (!empty($students)) {
             ->placeholder();
 }
 
+// Add student selector for attendance notifications
+if (!empty($eventTypes['attendance'])) {
+    $row = $form->addRow();
+        $row->addLabel('studentID', __('Students'))
+            ->description(__('Select specific students or leave empty for all students'));
+        $row->addSelect('studentID')
+            ->fromArray($students)
+            ->selectMultiple()
+            ->setSize(6)
+            ->placeholder(__('All Students'));
+}
+
 $row = $form->addRow();
     $row->addLabel('notifyBy', __('Notify By'));
     $row->addSelect('notifyBy')
@@ -91,9 +126,9 @@ $row = $form->addRow();
 echo $form->getOutput();
 
 // QUERY
-$criteria = $subscriptionGateway->newQueryCriteria(true)
+$criteria = $subscriptionGateway->newQueryCriteria()
     ->sortBy(['timestamp'], 'DESC')
-    ->fromPOST();
+    ->fromPOST('subscriptions');
 
 $subscriptions = $subscriptionGateway->querySubscriptions($criteria, $session->get('gibbonPersonID'));
 

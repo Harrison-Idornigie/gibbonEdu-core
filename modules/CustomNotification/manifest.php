@@ -46,13 +46,15 @@ $moduleTables[] = "CREATE TABLE `CustomNotificationSubscription` (
     `gibbonPersonID` INT(10) UNSIGNED ZEROFILL NOT NULL,
     `eventType` VARCHAR(90) NOT NULL,
     `notifyBy` ENUM('Email','SMS','Both') NOT NULL DEFAULT 'Email',
+    `targetPersonID` INT(10) UNSIGNED ZEROFILL NULL,
     `studentID` INT(10) UNSIGNED ZEROFILL NULL COMMENT 'Optional: specific student to monitor',
     `active` ENUM('Y','N') NOT NULL DEFAULT 'Y',
     `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `subscription` (`gibbonPersonID`,`eventType`,`studentID`),
     CONSTRAINT `CustomNotificationSubscription_ibfk_1` FOREIGN KEY (`gibbonPersonID`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT `CustomNotificationSubscription_ibfk_2` FOREIGN KEY (`studentID`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE CASCADE ON UPDATE CASCADE
+    CONSTRAINT `CustomNotificationSubscription_ibfk_2` FOREIGN KEY (`studentID`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `CustomNotificationSubscription_ibfk_3` FOREIGN KEY (`targetPersonID`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
 
 $moduleTables[] = "CREATE TABLE `CustomNotificationLog` (
@@ -72,70 +74,96 @@ $moduleTables[] = "CREATE TABLE `CustomNotificationLog` (
     CONSTRAINT `CustomNotificationLog_ibfk_1` FOREIGN KEY (`recipientID`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
 
+// Add default notification events
+$moduleTables[] = "INSERT INTO CustomNotificationEvent 
+    (name, type, recipients, template, active) VALUES 
+    ('attendance', 'Both', 'Parents,Students', 'Student {student} has been marked absent from {context} on {date}', 'Y');";
+
 // Module settings
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) VALUES
     ('CustomNotification', 'enableAttendanceNotifications', 'Enable Attendance Notifications', 'Enable notifications for attendance events', 'Y'),
+    ('CustomNotification', 'enableStudentAttendanceNotifications', 'Enable Student Attendance Notifications', 'Enable notifications to students about their own absences', 'N'),
     ('CustomNotification', 'allowParentUnsubscribe', 'Allow Parent Unsubscribe', 'Allow parents to unsubscribe from notifications', 'Y'),
     ('CustomNotification', 'mandatoryNotificationTypes', 'Mandatory Notification Types', 'Comma-separated list of notification types that cannot be unsubscribed from', ''),
     ('CustomNotification', 'attendanceCheckFrequency', 'Attendance Check Frequency', 'How often to check for new attendance records (in minutes)', '5');";
 
 // Action rows
 $actionRows[] = [
-    'name'                      => 'Manage Notifications',
-    'precedence'                => '0',
-    'category'                  => 'Admin',
-    'description'               => 'Configure notification settings and manage notification events.',
-    'URLList'                   => 'notifications_manage.php,notifications_manage_settingsProcess.php',
-    'entryURL'                  => 'notifications_manage.php',
-    'entrySidebar'              => 'Y',
-    'menuShow'                  => 'Y',
-    'defaultPermissionAdmin'    => 'Y',
-    'defaultPermissionTeacher'  => 'N',
-    'defaultPermissionStudent'  => 'N',
-    'defaultPermissionParent'   => 'N',
-    'defaultPermissionSupport'  => 'N',
-    'categoryPermissionStaff'   => 'Y',
+    'name' => 'Manage Notifications',
+    'precedence' => '0',
+    'category' => 'Notifications',
+    'description' => 'Manage notification events and templates.',
+    'URLList' => 'notifications_manage.php,notifications_manage_add.php,notifications_manage_edit.php,notifications_manage_delete.php',
+    'entryURL' => 'notifications_manage.php',
+    'entrySidebar' => 'Y',
+    'menuShow' => 'Y',
+    'defaultPermissionAdmin' => 'Y',
+    'defaultPermissionTeacher' => 'N',
+    'defaultPermissionStudent' => 'N',
+    'defaultPermissionParent' => 'N',
+    'defaultPermissionSupport' => 'N',
+    'categoryPermissionStaff' => 'Y',
     'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent'  => 'N',
-    'categoryPermissionOther'   => 'N'
+    'categoryPermissionParent' => 'N',
+    'categoryPermissionOther' => 'N'
 ];
 
 $actionRows[] = [
-    'name'                      => 'Manage My Subscriptions',
-    'precedence'                => '0',
-    'category'                  => 'Notifications',
-    'description'               => 'Subscribe or unsubscribe from notifications.',
-    'URLList'                   => 'notifications_subscriptions.php,notifications_subscriptionsProcess.php,notifications_subscriptions_deleteProcess.php',
-    'entryURL'                  => 'notifications_subscriptions.php',
-    'entrySidebar'              => 'Y',
-    'menuShow'                  => 'Y',
-    'defaultPermissionAdmin'    => 'Y',
-    'defaultPermissionTeacher'  => 'Y',
-    'defaultPermissionStudent'  => 'N',
-    'defaultPermissionParent'   => 'Y',
-    'defaultPermissionSupport'  => 'N',
-    'categoryPermissionStaff'   => 'Y',
+    'name' => 'Student Subscriptions',
+    'precedence' => '1',
+    'category' => 'Notifications',
+    'description' => 'Subscribe to notifications for specific students.',
+    'URLList' => 'notifications_subscribeStudents.php',
+    'entryURL' => 'notifications_subscribeStudents.php',
+    'entrySidebar' => 'Y',
+    'menuShow' => 'Y',
+    'defaultPermissionAdmin' => 'Y',
+    'defaultPermissionTeacher' => 'Y',
+    'defaultPermissionStudent' => 'N',
+    'defaultPermissionParent' => 'N',
+    'defaultPermissionSupport' => 'N',
+    'categoryPermissionStaff' => 'Y',
     'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent'  => 'Y',
-    'categoryPermissionOther'   => 'N'
+    'categoryPermissionParent' => 'N',
+    'categoryPermissionOther' => 'N'
 ];
 
 $actionRows[] = [
-    'name'                      => 'View Notification Log',
-    'precedence'                => '0',
-    'category'                  => 'Reports',
-    'description'               => 'View a log of all sent notifications.',
-    'URLList'                   => 'notifications_log.php',
-    'entryURL'                  => 'notifications_log.php',
-    'entrySidebar'              => 'Y',
-    'menuShow'                  => 'Y',
-    'defaultPermissionAdmin'    => 'Y',
-    'defaultPermissionTeacher'  => 'Y',
-    'defaultPermissionStudent'  => 'N',
-    'defaultPermissionParent'   => 'N',
-    'defaultPermissionSupport'  => 'Y',
-    'categoryPermissionStaff'   => 'Y',
+    'name' => 'Manage My Subscriptions',
+    'precedence' => '0',
+    'category' => 'Notifications',
+    'description' => 'Subscribe or unsubscribe from notifications.',
+    'URLList' => 'notifications_subscriptions.php,notifications_subscriptionsProcess.php,notifications_subscriptions_deleteProcess.php',
+    'entryURL' => 'notifications_subscriptions.php',
+    'entrySidebar' => 'Y',
+    'menuShow' => 'Y',
+    'defaultPermissionAdmin' => 'Y',
+    'defaultPermissionTeacher' => 'Y',
+    'defaultPermissionStudent' => 'Y',
+    'defaultPermissionParent' => 'Y',
+    'defaultPermissionSupport' => 'Y',
+    'categoryPermissionStaff' => 'Y',
+    'categoryPermissionStudent' => 'Y',
+    'categoryPermissionParent' => 'Y',
+    'categoryPermissionOther' => 'Y'
+];
+
+$actionRows[] = [
+    'name' => 'View Notification Log',
+    'precedence' => '0',
+    'category' => 'Reports',
+    'description' => 'View a log of all sent notifications.',
+    'URLList' => 'notifications_log.php',
+    'entryURL' => 'notifications_log.php',
+    'entrySidebar' => 'Y',
+    'menuShow' => 'Y',
+    'defaultPermissionAdmin' => 'Y',
+    'defaultPermissionTeacher' => 'Y',
+    'defaultPermissionStudent' => 'N',
+    'defaultPermissionParent' => 'N',
+    'defaultPermissionSupport' => 'Y',
+    'categoryPermissionStaff' => 'Y',
     'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent'  => 'N',
-    'categoryPermissionOther'   => 'N'
+    'categoryPermissionParent' => 'N',
+    'categoryPermissionOther' => 'N'
 ];

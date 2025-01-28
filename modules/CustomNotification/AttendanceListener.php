@@ -1,179 +1,196 @@
 <?php
-namespace Gibbon\Module\CustomNotification\Domain;
+namespace Gibbon\Module\CustomNotification;
 
 use PDO;
-use Gibbon\Domain\System\NotificationGateway;
-use Gibbon\Domain\System\SettingGateway;
+use Exception;
 use Gibbon\Comms\NotificationSender;
-use Gibbon\Domain\DataSet;
-use Gibbon\Comms\SMS;
+use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Domain\System\LogGateway;
+use Gibbon\Services\LoggerFactory;
+use Gibbon\Services\Format;
 
-/**
- * Attendance Listener Class
- * Handles attendance notifications by monitoring the gibbonAttendanceLogPerson table
- */
 class AttendanceListener
 {
-    protected $pdo;
-    protected $notificationGateway;
-    protected $notificationSender;
-    protected $settingGateway;
-    protected $sms;
+    private $pdo;
+    private $settingGateway;
+    private $notificationSender;
+    private $logGateway;
+    private $logger;
 
     public function __construct(
         PDO $pdo,
-        NotificationGateway $notificationGateway,
-        NotificationSender $notificationSender,
         SettingGateway $settingGateway,
-        SMS $sms
+        NotificationSender $notificationSender,
+        LogGateway $logGateway,
+        LoggerFactory $loggerFactory
     ) {
         $this->pdo = $pdo;
-        $this->notificationGateway = $notificationGateway;
-        $this->notificationSender = $notificationSender;
         $this->settingGateway = $settingGateway;
-        $this->sms = $sms;
+        $this->notificationSender = $notificationSender;
+        $this->logGateway = $logGateway;
+        $this->logger = $loggerFactory->getLogger('CustomNotification');
     }
 
-    /**
-     * Check for new attendance records and send notifications
-     * @param int $minutesBack How far back to check for new records
-     * @return void
-     */
     public function checkNewAttendanceRecords(int $minutesBack = 5): void
     {
-        // Check if notifications are enabled
-        if ($this->settingGateway->getSettingByScope('CustomNotification', 'enableAttendanceNotifications') != 'Y') {
-            error_log("[CustomNotification] Notifications are disabled");
-            return;
-        }
-
-        // Get new absence records
-        $sql = "SELECT gibbonAttendanceLogPerson.*, gibbonPerson.preferredName, gibbonPerson.surname, gibbonPerson.gibbonPersonID
-                FROM gibbonAttendanceLogPerson 
-                JOIN gibbonPerson ON gibbonPerson.gibbonPersonID=gibbonAttendanceLogPerson.gibbonPersonID 
-                WHERE timestampTaken > DATE_SUB(NOW(), INTERVAL :minutes MINUTE)
-                AND type='Absent'
-                AND gibbonAttendanceLogPerson.context IN ('Class', 'Form Group')";
-
-        error_log("[CustomNotification] Checking for absences in last $minutesBack minutes");
+        $this->logger->info('Starting attendance check', ['minutesBack' => $minutesBack]);
         
-        $result = $this->pdo->prepare($sql);
-        $result->execute(['minutes' => $minutesBack]);
+        try {
+            // Check if notifications are enabled
+            if ($this->settingGateway->getSettingByScope('CustomNotification', 'enableAttendanceNotifications') != 'Y') {
+                return;
+            }
 
-        while ($absence = $result->fetch()) {
-            error_log("[CustomNotification] Found absence for student {$absence['preferredName']} {$absence['surname']}");
-            $this->notifyAbsence($absence);
+            // Initialize counters
+            $absentCount = 0;
+            $emailCount = 0;
+            $smsCount = 0;
+
+            // Get new absence records
+            $cutoff = date('Y-m-d H:i:s', strtotime("-$minutesBack minutes"));
+            $this->logger->debug('Checking for records after', ['cutoff' => $cutoff]);
+
+            $data = ['cutoff' => $cutoff, 'type' => 'Absent'];
+            $sql = "SELECT DISTINCT gibbonAttendanceLogPerson.*, gibbonPerson.preferredName, gibbonPerson.surname,
+                    gibbonAttendanceCode.scope 
+                    FROM gibbonAttendanceLogPerson 
+                    JOIN gibbonPerson ON (gibbonAttendanceLogPerson.gibbonPersonID=gibbonPerson.gibbonPersonID)
+                    JOIN gibbonAttendanceCode ON (gibbonAttendanceLogPerson.type=gibbonAttendanceCode.name) 
+                    WHERE gibbonAttendanceLogPerson.timestampTaken >= :cutoff 
+                    AND gibbonAttendanceLogPerson.type=:type";
+            
+            $result = $this->pdo->prepare($sql);
+            $result->execute($data);
+            
+            $this->logger->info('Found new absence records', ['count' => $result->rowCount()]);
+            
+            while ($absence = $result->fetch()) {
+                $absentCount++;
+                $this->logger->debug('Processing absence', [
+                    'student' => $absence['preferredName'] . ' ' . $absence['surname'],
+                    'date' => $absence['date']
+                ]);
+                
+                list($emails, $sms) = $this->notifyAbsence($absence);
+                $emailCount += $emails;
+                $smsCount += $sms;
+            }
+
+            // Log summary to both system log and logger
+            $summary = "Absent Students: $absentCount, Emails Sent: $emailCount, SMS Sent: $smsCount";
+            $this->logger->info('Attendance check summary', [
+                'absentCount' => $absentCount,
+                'emailCount' => $emailCount,
+                'smsCount' => $smsCount
+            ]);
+            
+            $this->logGateway->addLog(
+                $this->settingGateway->getSettingByScope('System', 'gibbonSchoolYearID'),
+                'CustomNotification',
+                null,
+                'Attendance Check Summary',
+                ['summary' => $summary]
+            );
+        } catch (Exception $e) {
+            $this->logger->error('Error checking attendance', ['message' => $e->getMessage()]);
+            throw $e;
         }
     }
 
-    /**
-     * Send notifications for a single absence
-     * @param array $absence The absence record
-     */
-    protected function notifyAbsence(array $absence): void
+    private function notifyAbsence(array $absence): array
     {
-        error_log("[CustomNotification] Processing notification for absence {$absence['gibbonAttendanceLogPersonID']}");
+        $emailCount = 0;
+        $smsCount = 0;
+        
+        try {
+            // Get notification event
+            $sql = "SELECT * FROM CustomNotificationEvent WHERE name='attendance' AND active='Y'";
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute();
+            $event = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (empty($event)) {
+                $this->logger->warning('No active attendance notification event found');
+                return [$emailCount, $smsCount];
+            }
+            
+            $this->logger->debug('Processing notification event', ['eventId' => $event['id']);
 
-        $subscribers = [];
-        $allowParentUnsubscribe = $this->settingGateway->getSettingByScope('CustomNotification', 'allowParentUnsubscribe');
-
-        if ($allowParentUnsubscribe == 'Y') {
-            // Get notification subscribers
-            $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname, 
-                           CustomNotificationSubscription.notifyBy
+            // Get subscribers for this student
+            $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname,
+                    CustomNotificationSubscription.notificationType
                     FROM CustomNotificationSubscription 
-                    JOIN gibbonPerson ON gibbonPerson.gibbonPersonID=CustomNotificationSubscription.gibbonPersonID
+                    JOIN gibbonPerson ON (CustomNotificationSubscription.gibbonPersonID=gibbonPerson.gibbonPersonID)
                     WHERE CustomNotificationSubscription.eventType='attendance'
-                    AND CustomNotificationSubscription.active='Y'
-                    AND (CustomNotificationSubscription.studentID IS NULL 
-                         OR CustomNotificationSubscription.studentID=:studentID)";
-
-            $result = $this->pdo->prepare($sql);
-            $result->execute(['studentID' => $absence['gibbonPersonID']]);
-            $subscribers = $result->fetchAll();
-        }
-
-        // Always get parents if parent unsubscribe is not allowed
-        if ($allowParentUnsubscribe == 'N') {
-            $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname, 
-                           gibbonPerson.email, 'Email' as notifyBy
-                    FROM gibbonFamilyChild
-                    JOIN gibbonFamily ON (gibbonFamilyChild.gibbonFamilyID=gibbonFamily.gibbonFamilyID)
-                    JOIN gibbonFamilyAdult ON (gibbonFamilyAdult.gibbonFamilyID=gibbonFamily.gibbonFamilyID)
-                    JOIN gibbonPerson ON (gibbonFamilyAdult.gibbonPersonID=gibbonPerson.gibbonPersonID)
-                    WHERE gibbonFamilyChild.gibbonPersonID=:gibbonPersonID
-                    AND gibbonPerson.status='Full'
-                    AND gibbonPerson.email <> ''";
+                    AND (CustomNotificationSubscription.targetPersonID=:studentID 
+                         OR CustomNotificationSubscription.targetPersonID IS NULL)
+                    AND gibbonPerson.status='Full'";
             
-            $result = $this->pdo->prepare($sql);
-            $result->execute(['gibbonPersonID' => $absence['gibbonPersonID']]);
-            
-            while ($parent = $result->fetch()) {
-                $subscribers[] = $parent;
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute(['studentID' => $absence['gibbonPersonID']]);
+            $subscribers = $stmt->fetchAll();
+
+            if (empty($subscribers)) {
+                $this->logger->info('No subscribers found', ['studentId' => $absence['gibbonPersonID']]);
+                return [$emailCount, $smsCount];
             }
-        }
 
-        if (empty($subscribers)) {
-            error_log("[CustomNotification] No subscribers found for absence notification");
-            return;
-        }
+            // Replace placeholders in template
+            $template = $event['template'];
+            $template = str_replace('[studentName]', Format::name('', $absence['preferredName'], $absence['surname'], 'Student'), $template);
+            $template = str_replace('[date]', Format::date($absence['date']), $template);
+            $template = str_replace('[type]', $absence['type'], $template);
+            $template = str_replace('[reason]', $absence['reason'] ?? '', $template);
+            $template = str_replace('[comment]', $absence['comment'] ?? '', $template);
+            
+            $this->logger->debug('Sending notification for student', [
+                'student' => $absence['preferredName'] . ' ' . $absence['surname'],
+                'date' => $absence['date']
+            ]);
+            $this->logger->debug('Notification type', ['type' => $absence['type']]);
 
-        // Create the notification
-        $text = sprintf(
-            'Student %s %s has been marked absent from class.',
-            $absence['preferredName'],
-            $absence['surname']
-        );
-
-        // Add notification for each subscriber
-        foreach ($subscribers as $subscriber) {
-            $this->notificationSender->addNotification(
-                $subscriber['gibbonPersonID'],
-                sprintf('Your child %s %s has been marked absent.', 
-                    $absence['preferredName'], 
-                    $absence['surname']
-                ),
-                'CustomNotification',
-                '/modules/Attendance/attendance_take_byPerson.php'
-            );
-        }
-
-        // Send notifications
-        $this->notificationSender->sendNotifications();
-
-        // Send to each subscriber based on their preference
-        foreach ($subscribers as $subscriber) {
-            error_log("[CustomNotification] Sending notification to subscriber {$subscriber['gibbonPersonID']}");
-
-            // If SMS notification is requested, send via SMS class
-            if ($subscriber['notifyBy'] == 'SMS' || $subscriber['notifyBy'] == 'Both') {
-                error_log("[CustomNotification] Attempting to send SMS to subscriber {$subscriber['gibbonPersonID']}");
-                try {
-                    $this->sms->to($subscriber['gibbonPersonID'])->content($text)->send();
-                    
-                    // Log successful SMS
-                    $sql = "INSERT INTO CustomNotificationLog 
-                            (eventType, recipientType, recipientID, notificationType, status, message) 
-                            VALUES 
-                            ('attendance', 'Parent', :recipientID, 'SMS', 'Sent', :message)";
-                    $this->pdo->prepare($sql)->execute([
-                        'recipientID' => $subscriber['gibbonPersonID'],
-                        'message' => $text
-                    ]);
-                } catch (\Exception $e) {
-                    // Log failed SMS
-                    $sql = "INSERT INTO CustomNotificationLog 
-                            (eventType, recipientType, recipientID, notificationType, status, message, error) 
-                            VALUES 
-                            ('attendance', 'Parent', :recipientID, 'SMS', 'Failed', :message, :error)";
-                    $this->pdo->prepare($sql)->execute([
-                        'recipientID' => $subscriber['gibbonPersonID'],
-                        'message' => $text,
-                        'error' => $e->getMessage()
-                    ]);
-                    error_log("[CustomNotification] SMS Error: " . $e->getMessage());
+            // Send notifications to all subscribers
+            foreach ($subscribers as $subscriber) {
+                $this->notificationSender->addNotification(
+                    $subscriber['gibbonPersonID'],
+                    'Attendance',
+                    'Custom Notification',
+                    $template
+                );
+                
+                // Count notifications by type
+                if ($subscriber['notificationType'] === 'email') {
+                    $emailCount++;
+                } elseif ($subscriber['notificationType'] === 'sms') {
+                    $smsCount++;
                 }
+                
+                $this->logger->debug('Added notification', [
+                    'type' => $subscriber['notificationType'],
+                    'subscriberId' => $subscriber['gibbonPersonID']
+                ]);
+                
+                // Insert into log
+                $stmt = $this->pdo->prepare("INSERT INTO CustomNotificationLog 
+                        (gibbonPersonID, eventType, notificationType, status, timestamp) 
+                        VALUES 
+                        (:gibbonPersonID, :eventType, :notificationType, :status, :timestamp)");
+                
+                $stmt->execute([
+                    'gibbonPersonID' => $subscriber['gibbonPersonID'],
+                    'eventType' => 'attendance',
+                    'notificationType' => $subscriber['notificationType'],
+                    'status' => 'sent',
+                    'timestamp' => date('Y-m-d H:i:s')
+                ]);
+                
+                $this->logger->debug('Added entry to CustomNotificationLog', ['subscriberId' => $subscriber['gibbonPersonID']]);
             }
+            
+            return [$emailCount, $smsCount];
+        } catch (Exception $e) {
+            $this->logger->error('Error sending notification', ['message' => $e->getMessage()]);
+            throw $e;
         }
     }
 }

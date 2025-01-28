@@ -27,22 +27,22 @@ class NotificationLogGateway extends QueryableGateway
         return [
             'eventType' => function ($query, $eventType) {
                 return $query
-                    ->where('log.eventType = :eventType')
+                    ->where('CustomNotificationLog.eventType = :eventType')
                     ->bindValue('eventType', $eventType);
             },
             'status' => function ($query, $status) {
                 return $query
-                    ->where('log.status = :status')
+                    ->where('CustomNotificationLog.status = :status')
                     ->bindValue('status', $status);
             },
             'dateStart' => function ($query, $dateStart) {
                 return $query
-                    ->where('DATE(log.timestamp) >= :dateStart')
+                    ->where('DATE(CustomNotificationLog.timestamp) >= :dateStart')
                     ->bindValue('dateStart', $dateStart);
             },
             'dateEnd' => function ($query, $dateEnd) {
                 return $query
-                    ->where('DATE(log.timestamp) <= :dateEnd')
+                    ->where('DATE(CustomNotificationLog.timestamp) <= :dateEnd')
                     ->bindValue('dateEnd', $dateEnd);
             }
         ];
@@ -76,15 +76,15 @@ class NotificationLogGateway extends QueryableGateway
             ->newQuery()
             ->from($this->getTableName())
             ->cols([
-                'id',
-                'eventType',
-                'recipientType',
-                'recipientID',
-                'notificationType',
-                'status',
-                'message',
-                'error',
-                'timestamp',
+                'CustomNotificationLog.id',
+                'CustomNotificationLog.eventType',
+                'CustomNotificationLog.recipientType',
+                'CustomNotificationLog.recipientID',
+                'CustomNotificationLog.notificationType',
+                'CustomNotificationLog.status',
+                'CustomNotificationLog.message',
+                'CustomNotificationLog.error',
+                'CustomNotificationLog.timestamp',
                 'gibbonPerson.preferredName',
                 'gibbonPerson.surname',
                 'gibbonPerson.username'
@@ -92,22 +92,22 @@ class NotificationLogGateway extends QueryableGateway
             ->leftJoin('gibbonPerson', 'gibbonPerson.gibbonPersonID=CustomNotificationLog.recipientID');
 
         if ($criteria->hasFilter('eventType')) {
-            $query->where('eventType=:eventType')
+            $query->where('CustomNotificationLog.eventType=:eventType')
                   ->bindValue('eventType', $criteria->getFilterValue('eventType'));
         }
 
         if ($criteria->hasFilter('status')) {
-            $query->where('status=:status')
+            $query->where('CustomNotificationLog.status=:status')
                   ->bindValue('status', $criteria->getFilterValue('status'));
         }
 
         if ($criteria->hasFilter('dateStart')) {
-            $query->where('DATE(timestamp) >= :dateStart')
+            $query->where('DATE(CustomNotificationLog.timestamp) >= :dateStart')
                   ->bindValue('dateStart', $criteria->getFilterValue('dateStart'));
         }
 
         if ($criteria->hasFilter('dateEnd')) {
-            $query->where('DATE(timestamp) <= :dateEnd')
+            $query->where('DATE(CustomNotificationLog.timestamp) <= :dateEnd')
                   ->bindValue('dateEnd', $criteria->getFilterValue('dateEnd'));
         }
 

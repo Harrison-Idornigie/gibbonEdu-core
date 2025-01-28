@@ -1,71 +1,71 @@
 <?php
 namespace Gibbon\Module\CustomNotification\Domain;
 
-use PDO;
+use Gibbon\Module\CustomNotification\AttendanceListener;
+use Gibbon\Domain\System\LogGateway;
 use Gibbon\Domain\System\SettingGateway;
-use Gibbon\Domain\Students\StudentGateway;
-use Gibbon\Domain\User\FamilyGateway;
-use Gibbon\Domain\System\NotificationGateway;
-use Gibbon\Comms\NotificationSender;
-use Gibbon\Comms\SMS;
-use Gibbon\Services\BackgroundProcess;
+use PDO;
 
-/**
- * Background processor for attendance notifications
- */
-class AttendanceProcessor extends BackgroundProcess
+class AttendanceProcessor
 {
-    protected $pdo;
-    protected $settingGateway;
-    protected $studentGateway;
-    protected $familyGateway;
-    protected $notificationGateway;
-    protected $notificationSender;
-    protected $sms;
-    protected $listener;
+    private $listener;
+    private $logGateway;
+    private $pdo;
+    private $settingGateway;
 
     public function __construct(
-        PDO $pdo,
+        AttendanceListener $listener,
+        LogGateway $logGateway,
         SettingGateway $settingGateway,
-        StudentGateway $studentGateway,
-        FamilyGateway $familyGateway,
-        NotificationSender $notificationSender,
-        NotificationGateway $notificationGateway,
-        ?SMS $sms = null
+        PDO $pdo
     ) {
+        $this->listener = $listener;
+        $this->logGateway = $logGateway;
         $this->pdo = $pdo;
         $this->settingGateway = $settingGateway;
-        $this->studentGateway = $studentGateway;
-        $this->familyGateway = $familyGateway;
-        $this->notificationSender = $notificationSender;
-        $this->notificationGateway = $notificationGateway;
-        $this->sms = $sms;
-
-        // Create attendance listener
-        $this->listener = new AttendanceListener(
-            $pdo,
-            $notificationGateway,
-            $notificationSender,
-            $settingGateway,
-            $sms
-        );
     }
 
-    /**
-     * Process attendance notifications
-     * This is called by the background processor
-     * 
-     * @param array $data Process data from the background processor
-     * @return bool
-     */
-    public function process(array $data): bool
+    public function process(array $data = []): bool
     {
-        // Get check frequency from settings
-        $frequency = (int) $this->settingGateway->getSettingByScope('CustomNotification', 'attendanceCheckFrequency') ?? 5;
-        
-        // Check for new records
-        $this->listener->checkNewAttendanceRecords($frequency);
+        try {
+            // Get current school year
+            $sql = "SELECT gibbonSchoolYearID FROM gibbonSchoolYear WHERE status='Current'";
+            $schoolYear = $this->pdo->query($sql)->fetch();
+            $gibbonSchoolYearID = $schoolYear['gibbonSchoolYearID'] ?? null;
 
-        return true;
+            // Log start of process
+            $this->logGateway->addLog(
+                $gibbonSchoolYearID,
+                'Custom Notification',
+                null,
+                'Attendance Check Started'
+            );
+
+            // Get check frequency from settings
+            $frequency = (int) $this->settingGateway->getSettingByScope('CustomNotification', 'attendanceCheckFrequency') ?? 5;
+            
+            // Check for new records
+            $this->listener->checkNewAttendanceRecords($frequency);
+
+            // Log successful completion
+            $this->logGateway->addLog(
+                $gibbonSchoolYearID,
+                'Custom Notification',
+                null,
+                'Attendance Check Completed'
+            );
+
+            return true;
+        } catch (\Exception $e) {
+            // Log any errors
+            $this->logGateway->addLog(
+                $gibbonSchoolYearID ?? null,
+                'Custom Notification',
+                null,
+                'Attendance Check Error',
+                ['error' => $e->getMessage()]
+            );
+            return false;
+        }
     }
 }

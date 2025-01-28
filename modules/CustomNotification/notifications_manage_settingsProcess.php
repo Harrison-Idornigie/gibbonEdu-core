@@ -17,6 +17,7 @@ $settingGateway = $container->get(SettingGateway::class);
 
 $settings = [
     'enableAttendanceNotifications' => $_POST['enableAttendanceNotifications'] ?? 'N',
+    'enableStudentAttendanceNotifications' => $_POST['enableStudentAttendanceNotifications'] ?? 'N',
     'allowParentUnsubscribe' => $_POST['allowParentUnsubscribe'] ?? 'N',
     'attendanceCheckFrequency' => $_POST['attendanceCheckFrequency'] ?? '5',
     'mandatoryNotificationTypes' => $_POST['mandatoryTypes'] ?? ''

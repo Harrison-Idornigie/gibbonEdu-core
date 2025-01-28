@@ -17,6 +17,7 @@ $settingGateway = $container->get(SettingGateway::class);
 
 // Get settings
 $enableAttendanceNotifications = $settingGateway->getSettingByScope('CustomNotification', 'enableAttendanceNotifications');
+$enableStudentAttendanceNotifications = $settingGateway->getSettingByScope('CustomNotification', 'enableStudentAttendanceNotifications');
 $allowParentUnsubscribe = $settingGateway->getSettingByScope('CustomNotification', 'allowParentUnsubscribe');
 $mandatoryTypes = explode(',', $settingGateway->getSettingByScope('CustomNotification', 'mandatoryNotificationTypes'));
 $attendanceCheckFrequency = $settingGateway->getSettingByScope('CustomNotification', 'attendanceCheckFrequency');
@@ -30,6 +31,12 @@ $row = $form->addRow();
         ->description(__('Should notifications be sent when attendance is marked?'));
     $row->addYesNo('enableAttendanceNotifications')
         ->selected($enableAttendanceNotifications);
+
+$row = $form->addRow();
+    $row->addLabel('enableStudentAttendanceNotifications', __('Enable Student Attendance Notifications'))
+        ->description(__('Should students receive notifications about their own absences?'));
+    $row->addYesNo('enableStudentAttendanceNotifications')
+        ->selected($enableStudentAttendanceNotifications);
 
 $row = $form->addRow();
     $row->addLabel('allowParentUnsubscribe', __('Allow Parents to Unsubscribe'))
@@ -63,50 +70,71 @@ echo $form->getOutput();
 echo "<hr/>";
 
 // Current notification events table
-$table = DataTable::create('events');
+$table = DataTable::create('notificationEvents');
 $table->setTitle(__('Notification Events'));
 
-$table->addColumn('name', __('Name'));
-$table->addColumn('type', __('Type'));
-$table->addColumn('recipients', __('Recipients'));
+$table->addColumn('name', __('Event'))
+    ->format(function($row) {
+        return ucfirst($row['name']);
+    });
+
+$table->addColumn('notifyBy', __('Notification Method'))
+    ->format(function($row) {
+        return ucfirst($row['notifyBy'] ?? 'Both');
+    });
+
+$table->addColumn('availableTo', __('Available To'))
+    ->format(function($row) {
+        return str_replace(',', ', ', $row['availableTo'] ?? 'Parents,Students');
+    });
+
+$table->addColumn('template', __('Template'))
+    ->format(function($row) {
+        return substr($row['template'] ?? '', 0, 50) . (strlen($row['template'] ?? '') > 50 ? '...' : '');
+    });
+
 $table->addColumn('active', __('Active'))
     ->format(function($row) {
         return $row['active'] == 'Y' ? __('Yes') : __('No');
     });
 
+// Add actions
 $table->addActionColumn()
     ->addParam('id')
-    ->format(function ($row, $actions) {
-        $actions->addAction('edit', __('Edit'))
-            ->setURL('/modules/CustomNotification/notifications_manage_edit.php')
-            ->setIcon('config');
+    ->format(function ($row, $actions) use ($guid) {
+        $actions->addAction('edit', __('Edit Template'))
+            ->setURL('/modules/CustomNotification/notifications_manage_template.php')
+            ->setIcon('edit');
             
-        $actions->addAction('delete', __('Delete'))
-            ->setURL('/modules/CustomNotification/notifications_manage_delete.php')
-            ->setIcon('garbage');
+        $actions->addAction('toggle', __('Toggle Active'))
+            ->setURL('/modules/CustomNotification/notifications_manage_toggle.php')
+            ->setIcon($row['active'] == 'Y' ? 'check' : 'x')
+            ->addParam('id', $row['id']);
     });
 
 // Get notification events
 try {
-    $data = [];
-    $sql = "SELECT id, name, type, recipients, active 
+    $sql = "SELECT id, name, type as notifyBy, recipients as availableTo, template, active 
             FROM CustomNotificationEvent 
-            WHERE active='Y'
             ORDER BY name";
-    $result = $pdo->select($sql, $data);
+    $result = $pdo->select($sql);
     
-    $events = [];
-    while ($row = $result->fetch()) {
-        $events[] = [
-            'id' => $row['id'],
-            'name' => $row['name'],
-            'type' => __($row['type']),
-            'recipients' => __($row['recipients']),
-            'active' => $row['active']
-        ];
-    }
+    echo $table->render($result->toDataSet());
 } catch (PDOException $e) {
     $page->addError($e->getMessage());
 }
 
-echo $table->render($events);
+// Add help text about placeholders
+$placeholders = [
+    '[studentName]' => __('Student\'s full name'),
+    '[date]' => __('Date of absence'),
+    '[type]' => __('Type of absence'),
+    '[reason]' => __('Reason for absence'),
+    '[comment]' => __('Additional comments')
+];
+    
+$help = '<strong>'.__('Available Placeholders').':</strong><br/>';
+foreach ($placeholders as $placeholder => $description) {
+    $help .= "<code>$placeholder</code> - $description<br/>";
+}
+$page->addAlert('info', $help);

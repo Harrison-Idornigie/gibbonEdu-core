@@ -5,6 +5,8 @@ use Gibbon\Domain\Traits\TableAware;
 use Gibbon\Domain\QueryCriteria;
 use Gibbon\Domain\QueryableGateway;
 use Gibbon\Domain\DataSet;
+use Aura\SqlQuery\Common\DeleteInterface;
+use Aura\SqlQuery\Common\UpdateInterface;
 
 /**
  * Notification Subscription Gateway
@@ -18,10 +20,11 @@ class NotificationSubscriptionGateway extends QueryableGateway
 
     private static $tableName = 'CustomNotificationSubscription';
     private static $primaryKey = 'id';
-    private static $searchableColumns = ['eventType'];
+    private static $searchableColumns = ['eventType', 'notifyBy', 'active'];
 
     /**
      * @param QueryCriteria $criteria
+     * @param int|null $gibbonPersonID
      * @return DataSet
      */
     public function querySubscriptions(QueryCriteria $criteria, $gibbonPersonID = null): DataSet
@@ -30,13 +33,13 @@ class NotificationSubscriptionGateway extends QueryableGateway
             ->newQuery()
             ->from($this->getTableName())
             ->cols([
-                'id',
-                'gibbonPersonID',
-                'eventType',
-                'notifyBy',
-                'studentID',
-                'active',
-                'timestamp',
+                'CustomNotificationSubscription.id',
+                'CustomNotificationSubscription.gibbonPersonID',
+                'CustomNotificationSubscription.eventType',
+                'CustomNotificationSubscription.notifyBy',
+                'CustomNotificationSubscription.studentID',
+                'CustomNotificationSubscription.active',
+                'CustomNotificationSubscription.timestamp',
                 'student.preferredName as studentPreferredName',
                 'student.surname as studentSurname'
             ])
@@ -117,5 +120,23 @@ class NotificationSubscriptionGateway extends QueryableGateway
             ->bindValue('id', $id);
 
         return $this->runDelete($query);
+    }
+
+    /**
+     * @param DeleteInterface $query
+     * @return bool
+     */
+    public function runDelete(DeleteInterface $query): bool
+    {
+        return parent::runDelete($query);
+    }
+
+    /**
+     * @param UpdateInterface $query
+     * @return bool
+     */
+    public function runUpdate(UpdateInterface $query): bool
+    {
+        return parent::runUpdate($query);
     }
 }
