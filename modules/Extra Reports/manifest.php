@@ -17,83 +17,115 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-// Basic module information
+// Basic variables
 $name = 'Extra Reports';
-$description = 'An extension of the Reports module that adds support for A3 paper size and additional template management.';
-$entryURL = 'extraReports_manage.php';
-$type = 'Additional';
-$category = 'Assess';
-$version = '0.0.01';
-$author = 'Harrison Idornigie';
+$description = 'A module for generating custom report cards.';
+$entryURL = "report_cards_manage.php";
+$type = "Additional";
+$category = "Assess";
+$version = '0.1.00';
+$author = 'Your Name';
 $url = '';
 
-// Module relationships
-$dependencies = array(
-    'Reports' => '23.0.00' // Requires Reports module version 23.0.00 or higher
-);
-
-// Compatibility
-$gibbonCompatibility = '23.0.00';
-$phpCompatibility = '7.3';
-
 // Module tables
-$moduleTables[] = "CREATE TABLE IF NOT EXISTS extraReportsPaperSize (
-    gibbonReportTemplateID INT(10) UNSIGNED NOT NULL,
-    paperSize ENUM('A3','A4','LETTER') NOT NULL DEFAULT 'A4',
-    PRIMARY KEY (gibbonReportTemplateID),
-    FOREIGN KEY (gibbonReportTemplateID) REFERENCES gibbonReportTemplate (gibbonReportTemplateID)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+$moduleTables = [
+    "CREATE TABLE `extraReportAssessment` (
+        `assessmentID` INT(10) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
+        `studentID` INT(10) UNSIGNED ZEROFILL NOT NULL,
+        `reportingPeriod` VARCHAR(50) NOT NULL,
+        `section` VARCHAR(50) NOT NULL,
+        `item` VARCHAR(255) NOT NULL,
+        `score` INT(1) NOT NULL DEFAULT 0,
+        `comment` TEXT NULL DEFAULT NULL,
+        `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`assessmentID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;",
+    
+    "CREATE TABLE `extraReportTemplate` (
+        `templateID` INT(10) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
+        `name` VARCHAR(100) NOT NULL,
+        `description` TEXT NULL,
+        `sections` TEXT NOT NULL,
+        `chartSections` TEXT NOT NULL,
+        `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`templateID`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+];
 
-// Add moduleID column to gibbonReportTemplate if it doesn't exist
-$moduleTables[] = "ALTER TABLE gibbonReportTemplate 
-    ADD COLUMN IF NOT EXISTS `moduleID` varchar(50) DEFAULT 'Reports' AFTER `gibbonReportTemplateID`,
-    ADD COLUMN IF NOT EXISTS `description` text DEFAULT NULL AFTER `orientation`;";
-
-// Update existing templates to have Reports as moduleID
-$moduleTables[] = "UPDATE gibbonReportTemplate SET moduleID='Reports' WHERE moduleID IS NULL;";
-
-// Add hooks
-$hooks[] = "INSERT INTO `gibbonHook` (`name`, `type`, `options`, `gibbonModuleID`) VALUES 
-('Paper Size Settings', 'Report Template', 'a:3:{s:16:\"sourceModuleName\";s:13:\"Extra Reports\";s:18:\"sourceModuleAction\";s:18:\"extraReports_manage\";s:10:\"sourceClass\";s:54:\"Gibbon\\Module\\ExtraReports\\Hook\\ReportTemplateHook\";}', 
-(SELECT gibbonModuleID FROM gibbonModule WHERE name='Extra Reports'));";
+// Gibbonisation
+$gibbonSetting = [
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('Extra Reports', 'templatePath', 'Template Path', 'Path to report card templates', '/modules/Extra Reports/templates/reportCards/');"
+];
 
 // Action rows
-$actionRows[] = [
-    'name' => 'Manage Report Templates',
-    'precedence' => '0',
-    'category' => 'Assess',
-    'description' => 'Allows users to manage report templates specific to Extra Reports.',
-    'URLList' => 'extraReports_templates_manage.php,extraReports_templates_manage_add.php,extraReports_templates_manage_addProcess.php,extraReports_templates_manage_edit.php,extraReports_templates_manage_editProcess.php,extraReports_templates_manage_delete.php,extraReports_templates_manage_deleteProcess.php',
-    'entryURL' => 'extraReports_templates_manage.php',
-    'entrySidebar' => 'Y',
-    'menuShow' => 'Y',
-    'defaultPermissionAdmin' => 'Y',
-    'defaultPermissionTeacher' => 'N',
-    'defaultPermissionStudent' => 'N',
-    'defaultPermissionParent' => 'N',
-    'defaultPermissionSupport' => 'N',
-    'categoryPermissionStaff' => 'Y',
-    'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent' => 'N',
-    'categoryPermissionOther' => 'N'
+$actionRows = [
+    [
+        'name' => 'Manage Report Cards',
+        'precedence' => '0',
+        'category' => 'Report Cards',
+        'description' => 'Manage and generate report cards',
+        'URLList' => 'report_cards_manage.php',
+        'entryURL' => 'report_cards_manage.php',
+        'entrySidebar' => 'Y',
+        'menuShow' => 'Y',
+        'defaultPermissionAdmin' => 'Y',
+        'defaultPermissionTeacher' => 'Y',
+        'defaultPermissionStudent' => 'N',
+        'defaultPermissionParent' => 'N',
+        'defaultPermissionSupport' => 'N',
+        'categoryPermissionStaff' => 'Y',
+        'categoryPermissionStudent' => 'N',
+        'categoryPermissionParent' => 'N',
+        'categoryPermissionOther' => 'N'
+    ],
+    [
+        'name' => 'Enter Assessments',
+        'precedence' => '0',
+        'category' => 'Report Cards',
+        'description' => 'Enter assessments for report cards',
+        'URLList' => 'report_cards_enter.php,report_cards_enter_student.php',
+        'entryURL' => 'report_cards_enter.php',
+        'entrySidebar' => 'Y',
+        'menuShow' => 'Y',
+        'defaultPermissionAdmin' => 'Y',
+        'defaultPermissionTeacher' => 'Y',
+        'defaultPermissionStudent' => 'N',
+        'defaultPermissionParent' => 'N',
+        'defaultPermissionSupport' => 'N',
+        'categoryPermissionStaff' => 'Y',
+        'categoryPermissionStudent' => 'N',
+        'categoryPermissionParent' => 'N',
+        'categoryPermissionOther' => 'N'
+    ],
+    [
+        'name' => 'View Assessments',
+        'precedence' => '0',
+        'category' => 'Report Cards',
+        'description' => 'View and manage all assessments',
+        'URLList' => 'report_cards_view.php',
+        'entryURL' => 'report_cards_view.php',
+        'entrySidebar' => 'Y',
+        'menuShow' => 'Y',
+        'defaultPermissionAdmin' => 'Y',
+        'defaultPermissionTeacher' => 'Y',
+        'defaultPermissionStudent' => 'N',
+        'defaultPermissionParent' => 'N',
+        'defaultPermissionSupport' => 'N',
+        'categoryPermissionStaff' => 'Y',
+        'categoryPermissionStudent' => 'N',
+        'categoryPermissionParent' => 'N',
+        'categoryPermissionOther' => 'N'
+    ]
 ];
 
-$actionRows[] = [
-    'name' => 'Manage Reports',
-    'precedence' => '0',
-    'category' => 'Assess',
-    'description' => 'Allows users to manage report paper sizes.',
-    'URLList' => 'extraReports_manage.php,extraReports_manage_edit.php,extraReports_manage_editProcess.php',
-    'entryURL' => 'extraReports_manage.php',
-    'entrySidebar' => 'Y',
-    'menuShow' => 'Y',
-    'defaultPermissionAdmin' => 'Y',
-    'defaultPermissionTeacher' => 'N',
-    'defaultPermissionStudent' => 'N',
-    'defaultPermissionParent' => 'N',
-    'defaultPermissionSupport' => 'N',
-    'categoryPermissionStaff' => 'Y',
-    'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent' => 'N',
-    'categoryPermissionOther' => 'N'
+// Module config
+$moduleConfig = [
+    'reportCardFormats' => json_encode([
+        'preKindergarten' => ['name' => 'Pre-Kindergarten', 'file' => 'preKindergartenReport.php'],
+        'kindergarten' => ['name' => 'Kindergarten', 'file' => 'kindergartenReport.php'],
+        'gradeOne' => ['name' => 'Grade One', 'file' => 'gradeOneReport.php']
+    ])
 ];
+?>
