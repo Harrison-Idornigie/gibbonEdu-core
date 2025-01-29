@@ -19,13 +19,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 // Basic module information
 $name = 'Extra Reports';
-$description = 'Extends the core Reports module with additional features like A3 paper size support.';
+$description = 'An extension of the Reports module that adds support for A3 paper size and additional template management.';
 $entryURL = 'extraReports_manage.php';
 $type = 'Additional';
 $category = 'Assess';
-$version = '1.0.00';
-$author = 'Gibbon User Community';
-$url = 'https://github.com/GibbonEdu/module-ExtraReports';
+$version = '0.0.01';
+$author = 'Harrison Idornigie';
+$url = '';
 
 // Module relationships
 $dependencies = array(
@@ -37,15 +37,20 @@ $gibbonCompatibility = '23.0.00';
 $phpCompatibility = '7.3';
 
 // Module tables
-$moduleTables[] = "CREATE TABLE `extraReportsPaperSize` (
-    `id` INT(10) UNSIGNED ZEROFILL AUTO_INCREMENT,
-    `gibbonReportTemplateID` INT(10) UNSIGNED ZEROFILL,
-    `paperSize` ENUM('A4', 'A3', 'LETTER') DEFAULT 'A4',
-    PRIMARY KEY (`id`),
-    UNIQUE KEY `template` (`gibbonReportTemplateID`),
-    FOREIGN KEY (`gibbonReportTemplateID`) REFERENCES `gibbonReportTemplate` (`gibbonReportTemplateID`)
-        ON DELETE CASCADE
+$moduleTables[] = "CREATE TABLE IF NOT EXISTS extraReportsPaperSize (
+    gibbonReportTemplateID INT(10) UNSIGNED NOT NULL,
+    paperSize ENUM('A3','A4','LETTER') NOT NULL DEFAULT 'A4',
+    PRIMARY KEY (gibbonReportTemplateID),
+    FOREIGN KEY (gibbonReportTemplateID) REFERENCES gibbonReportTemplate (gibbonReportTemplateID)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+
+// Add moduleID column to gibbonReportTemplate if it doesn't exist
+$moduleTables[] = "ALTER TABLE gibbonReportTemplate 
+    ADD COLUMN IF NOT EXISTS `moduleID` varchar(50) DEFAULT 'Reports' AFTER `gibbonReportTemplateID`,
+    ADD COLUMN IF NOT EXISTS `description` text DEFAULT NULL AFTER `orientation`;";
+
+// Update existing templates to have Reports as moduleID
+$moduleTables[] = "UPDATE gibbonReportTemplate SET moduleID='Reports' WHERE moduleID IS NULL;";
 
 // Add hooks
 $hooks[] = "INSERT INTO `gibbonHook` (`name`, `type`, `options`, `gibbonModuleID`) VALUES 
@@ -54,21 +59,41 @@ $hooks[] = "INSERT INTO `gibbonHook` (`name`, `type`, `options`, `gibbonModuleID
 
 // Action rows
 $actionRows[] = [
-    'name'                      => 'Manage Paper Sizes', 
-    'precedence'                => '0',
-    'category'                  => 'Reports',
-    'description'               => 'Manage paper size settings for report templates.',
-    'URLList'                   => 'extraReports_manage.php',
-    'entryURL'                  => 'extraReports_manage.php',
-    'entrySidebar'              => 'Y',
-    'menuShow'                  => 'Y',
-    'defaultPermissionAdmin'    => 'Y',
-    'defaultPermissionTeacher'  => 'N',
-    'defaultPermissionStudent'  => 'N',
-    'defaultPermissionParent'   => 'N',
-    'defaultPermissionSupport'  => 'N',
-    'categoryPermissionStaff'   => 'Y',
+    'name' => 'Manage Report Templates',
+    'precedence' => '0',
+    'category' => 'Assess',
+    'description' => 'Allows users to manage report templates specific to Extra Reports.',
+    'URLList' => 'extraReports_templates_manage.php,extraReports_templates_manage_add.php,extraReports_templates_manage_addProcess.php,extraReports_templates_manage_edit.php,extraReports_templates_manage_editProcess.php,extraReports_templates_manage_delete.php,extraReports_templates_manage_deleteProcess.php',
+    'entryURL' => 'extraReports_templates_manage.php',
+    'entrySidebar' => 'Y',
+    'menuShow' => 'Y',
+    'defaultPermissionAdmin' => 'Y',
+    'defaultPermissionTeacher' => 'N',
+    'defaultPermissionStudent' => 'N',
+    'defaultPermissionParent' => 'N',
+    'defaultPermissionSupport' => 'N',
+    'categoryPermissionStaff' => 'Y',
     'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent'  => 'N',
-    'categoryPermissionOther'   => 'N'
+    'categoryPermissionParent' => 'N',
+    'categoryPermissionOther' => 'N'
+];
+
+$actionRows[] = [
+    'name' => 'Manage Reports',
+    'precedence' => '0',
+    'category' => 'Assess',
+    'description' => 'Allows users to manage report paper sizes.',
+    'URLList' => 'extraReports_manage.php,extraReports_manage_edit.php,extraReports_manage_editProcess.php',
+    'entryURL' => 'extraReports_manage.php',
+    'entrySidebar' => 'Y',
+    'menuShow' => 'Y',
+    'defaultPermissionAdmin' => 'Y',
+    'defaultPermissionTeacher' => 'N',
+    'defaultPermissionStudent' => 'N',
+    'defaultPermissionParent' => 'N',
+    'defaultPermissionSupport' => 'N',
+    'categoryPermissionStaff' => 'Y',
+    'categoryPermissionStudent' => 'N',
+    'categoryPermissionParent' => 'N',
+    'categoryPermissionOther' => 'N'
 ];
