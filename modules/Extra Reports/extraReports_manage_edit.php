@@ -1,0 +1,81 @@
+<?php
+/*
+Gibbon, Flexible & Open School System
+Copyright (C) 2010, Ross Parker
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+// System-wide requirements
+require_once __DIR__ . '/../../gibbon.php';
+
+use Gibbon\Forms\Form;
+use Gibbon\Forms\DatabaseFormFactory;
+
+$_SESSION[$guid]['moduleID'] = getModuleIDFromName($connection2, 'Extra Reports');
+
+if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/extraReports_manage.php') == false) {
+    // Access denied
+    $page->addError(__('You do not have access to this action.'));
+} else {
+    // Proceed!
+    $gibbonReportTemplateID = $_GET['gibbonReportTemplateID'] ?? '';
+
+    if (empty($gibbonReportTemplateID)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    $page->breadcrumbs
+        ->add(__('Manage Paper Sizes'), 'extraReports_manage.php')
+        ->add(__('Edit Paper Size'));
+
+    // Get the template
+    $sql = "SELECT t.*, eps.paperSize as customPaperSize 
+            FROM gibbonReportTemplate t 
+            LEFT JOIN extraReportsPaperSize eps ON eps.gibbonReportTemplateID = t.gibbonReportTemplateID 
+            WHERE t.gibbonReportTemplateID=:templateID";
+    
+    $result = $pdo->selectOne($sql, ['templateID' => $gibbonReportTemplateID]);
+
+    if (empty($result)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    // Create the form
+    $form = Form::create('paperSize', $session->get('absoluteURL').'/modules/Extra Reports/extraReports_manage_editProcess.php');
+    $form->setFactory(DatabaseFormFactory::create($pdo));
+
+    $form->addHiddenValue('address', $session->get('address'));
+    $form->addHiddenValue('gibbonReportTemplateID', $gibbonReportTemplateID);
+
+    $row = $form->addRow();
+        $row->addLabel('name', __('Template Name'));
+        $row->addTextField('name')->readonly()->setValue($result['name']);
+
+    $paperSizes = ['A4' => __('A4'), 'A3' => __('A3'), 'LETTER' => __('US Letter')];
+    $row = $form->addRow();
+        $row->addLabel('paperSize', __('Paper Size'));
+        $row->addSelect('paperSize')
+            ->fromArray($paperSizes)
+            ->selected($result['customPaperSize'] ?? $result['pageSize'])
+            ->required();
+
+    $row = $form->addRow();
+        $row->addFooter();
+        $row->addSubmit();
+
+    echo $form->getOutput();
+}

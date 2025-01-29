@@ -1,0 +1,251 @@
+<!DOCTYPE html><html><head>
+      <title>01_introduction_to_gibbonedu</title>
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      
+      <link rel="stylesheet" href="file:////home/onionlake-admin/.vscode-server/extensions/shd101wyy.markdown-preview-enhanced-0.8.15/crossnote/dependencies/katex/katex.min.css">
+      
+      
+      
+      
+      
+      <style>
+      code[class*=language-],pre[class*=language-]{color:#333;background:0 0;font-family:Consolas,"Liberation Mono",Menlo,Courier,monospace;text-align:left;white-space:pre;word-spacing:normal;word-break:normal;word-wrap:normal;line-height:1.4;-moz-tab-size:8;-o-tab-size:8;tab-size:8;-webkit-hyphens:none;-moz-hyphens:none;-ms-hyphens:none;hyphens:none}pre[class*=language-]{padding:.8em;overflow:auto;border-radius:3px;background:#f5f5f5}:not(pre)>code[class*=language-]{padding:.1em;border-radius:.3em;white-space:normal;background:#f5f5f5}.token.blockquote,.token.comment{color:#969896}.token.cdata{color:#183691}.token.doctype,.token.macro.property,.token.punctuation,.token.variable{color:#333}.token.builtin,.token.important,.token.keyword,.token.operator,.token.rule{color:#a71d5d}.token.attr-value,.token.regex,.token.string,.token.url{color:#183691}.token.atrule,.token.boolean,.token.code,.token.command,.token.constant,.token.entity,.token.number,.token.property,.token.symbol{color:#0086b3}.token.prolog,.token.selector,.token.tag{color:#63a35c}.token.attr-name,.token.class,.token.class-name,.token.function,.token.id,.token.namespace,.token.pseudo-class,.token.pseudo-element,.token.url-reference .token.variable{color:#795da3}.token.entity{cursor:help}.token.title,.token.title .token.punctuation{font-weight:700;color:#1d3e81}.token.list{color:#ed6a43}.token.inserted{background-color:#eaffea;color:#55a532}.token.deleted{background-color:#ffecec;color:#bd2c00}.token.bold{font-weight:700}.token.italic{font-style:italic}.language-json .token.property{color:#183691}.language-markup .token.tag .token.punctuation{color:#333}.language-css .token.function,code.language-css{color:#0086b3}.language-yaml .token.atrule{color:#63a35c}code.language-yaml{color:#183691}.language-ruby .token.function{color:#333}.language-markdown .token.url{color:#795da3}.language-makefile .token.symbol{color:#795da3}.language-makefile .token.variable{color:#183691}.language-makefile .token.builtin{color:#0086b3}.language-bash .token.keyword{color:#0086b3}pre[data-line]{position:relative;padding:1em 0 1em 3em}pre[data-line] .line-highlight-wrapper{position:absolute;top:0;left:0;background-color:transparent;display:block;width:100%}pre[data-line] .line-highlight{position:absolute;left:0;right:0;padding:inherit 0;margin-top:1em;background:hsla(24,20%,50%,.08);background:linear-gradient(to right,hsla(24,20%,50%,.1) 70%,hsla(24,20%,50%,0));pointer-events:none;line-height:inherit;white-space:pre}pre[data-line] .line-highlight:before,pre[data-line] .line-highlight[data-end]:after{content:attr(data-start);position:absolute;top:.4em;left:.6em;min-width:1em;padding:0 .5em;background-color:hsla(24,20%,50%,.4);color:#f4f1ef;font:bold 65%/1.5 sans-serif;text-align:center;vertical-align:.3em;border-radius:999px;text-shadow:none;box-shadow:0 1px #fff}pre[data-line] .line-highlight[data-end]:after{content:attr(data-end);top:auto;bottom:.4em}html body{font-family:'Helvetica Neue',Helvetica,'Segoe UI',Arial,freesans,sans-serif;font-size:16px;line-height:1.6;color:#333;background-color:#fff;overflow:initial;box-sizing:border-box;word-wrap:break-word}html body>:first-child{margin-top:0}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{line-height:1.2;margin-top:1em;margin-bottom:16px;color:#000}html body h1{font-size:2.25em;font-weight:300;padding-bottom:.3em}html body h2{font-size:1.75em;font-weight:400;padding-bottom:.3em}html body h3{font-size:1.5em;font-weight:500}html body h4{font-size:1.25em;font-weight:600}html body h5{font-size:1.1em;font-weight:600}html body h6{font-size:1em;font-weight:600}html body h1,html body h2,html body h3,html body h4,html body h5{font-weight:600}html body h5{font-size:1em}html body h6{color:#5c5c5c}html body strong{color:#000}html body del{color:#5c5c5c}html body a:not([href]){color:inherit;text-decoration:none}html body a{color:#08c;text-decoration:none}html body a:hover{color:#00a3f5;text-decoration:none}html body img{max-width:100%}html body>p{margin-top:0;margin-bottom:16px;word-wrap:break-word}html body>ol,html body>ul{margin-bottom:16px}html body ol,html body ul{padding-left:2em}html body ol.no-list,html body ul.no-list{padding:0;list-style-type:none}html body ol ol,html body ol ul,html body ul ol,html body ul ul{margin-top:0;margin-bottom:0}html body li{margin-bottom:0}html body li.task-list-item{list-style:none}html body li>p{margin-top:0;margin-bottom:0}html body .task-list-item-checkbox{margin:0 .2em .25em -1.8em;vertical-align:middle}html body .task-list-item-checkbox:hover{cursor:pointer}html body blockquote{margin:16px 0;font-size:inherit;padding:0 15px;color:#5c5c5c;background-color:#f0f0f0;border-left:4px solid #d6d6d6}html body blockquote>:first-child{margin-top:0}html body blockquote>:last-child{margin-bottom:0}html body hr{height:4px;margin:32px 0;background-color:#d6d6d6;border:0 none}html body table{margin:10px 0 15px 0;border-collapse:collapse;border-spacing:0;display:block;width:100%;overflow:auto;word-break:normal;word-break:keep-all}html body table th{font-weight:700;color:#000}html body table td,html body table th{border:1px solid #d6d6d6;padding:6px 13px}html body dl{padding:0}html body dl dt{padding:0;margin-top:16px;font-size:1em;font-style:italic;font-weight:700}html body dl dd{padding:0 16px;margin-bottom:16px}html body code{font-family:Menlo,Monaco,Consolas,'Courier New',monospace;font-size:.85em;color:#000;background-color:#f0f0f0;border-radius:3px;padding:.2em 0}html body code::after,html body code::before{letter-spacing:-.2em;content:'\00a0'}html body pre>code{padding:0;margin:0;word-break:normal;white-space:pre;background:0 0;border:0}html body .highlight{margin-bottom:16px}html body .highlight pre,html body pre{padding:1em;overflow:auto;line-height:1.45;border:#d6d6d6;border-radius:3px}html body .highlight pre{margin-bottom:0;word-break:normal}html body pre code,html body pre tt{display:inline;max-width:initial;padding:0;margin:0;overflow:initial;line-height:inherit;word-wrap:normal;background-color:transparent;border:0}html body pre code:after,html body pre code:before,html body pre tt:after,html body pre tt:before{content:normal}html body blockquote,html body dl,html body ol,html body p,html body pre,html body ul{margin-top:0;margin-bottom:16px}html body kbd{color:#000;border:1px solid #d6d6d6;border-bottom:2px solid #c7c7c7;padding:2px 4px;background-color:#f0f0f0;border-radius:3px}@media print{html body{background-color:#fff}html body h1,html body h2,html body h3,html body h4,html body h5,html body h6{color:#000;page-break-after:avoid}html body blockquote{color:#5c5c5c}html body pre{page-break-inside:avoid}html body table{display:table}html body img{display:block;max-width:100%;max-height:100%}html body code,html body pre{word-wrap:break-word;white-space:pre}}.markdown-preview{width:100%;height:100%;box-sizing:border-box}.markdown-preview ul{list-style:disc}.markdown-preview ul ul{list-style:circle}.markdown-preview ul ul ul{list-style:square}.markdown-preview ol{list-style:decimal}.markdown-preview ol ol,.markdown-preview ul ol{list-style-type:lower-roman}.markdown-preview ol ol ol,.markdown-preview ol ul ol,.markdown-preview ul ol ol,.markdown-preview ul ul ol{list-style-type:lower-alpha}.markdown-preview .newpage,.markdown-preview .pagebreak{page-break-before:always}.markdown-preview pre.line-numbers{position:relative;padding-left:3.8em;counter-reset:linenumber}.markdown-preview pre.line-numbers>code{position:relative}.markdown-preview pre.line-numbers .line-numbers-rows{position:absolute;pointer-events:none;top:1em;font-size:100%;left:0;width:3em;letter-spacing:-1px;border-right:1px solid #999;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;user-select:none}.markdown-preview pre.line-numbers .line-numbers-rows>span{pointer-events:none;display:block;counter-increment:linenumber}.markdown-preview pre.line-numbers .line-numbers-rows>span:before{content:counter(linenumber);color:#999;display:block;padding-right:.8em;text-align:right}.markdown-preview .mathjax-exps .MathJax_Display{text-align:center!important}.markdown-preview:not([data-for=preview]) .code-chunk .code-chunk-btn-group{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .status{display:none}.markdown-preview:not([data-for=preview]) .code-chunk .output-div{margin-bottom:16px}.markdown-preview .md-toc{padding:0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link div,.markdown-preview .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}.markdown-preview .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}.scrollbar-style::-webkit-scrollbar{width:8px}.scrollbar-style::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}.scrollbar-style::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode]){position:relative;width:100%;height:100%;top:0;left:0;margin:0;padding:0;overflow:auto}html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{position:relative;top:0;min-height:100vh}@media screen and (min-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em calc(50% - 457px + 2em)}}@media screen and (max-width:914px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode]) .markdown-preview{font-size:14px!important;padding:1em}}@media print{html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{display:none}}html body[for=html-export]:not([data-presentation-mode]) #sidebar-toc-btn{position:fixed;bottom:8px;left:8px;font-size:28px;cursor:pointer;color:inherit;z-index:99;width:32px;text-align:center;opacity:.4}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] #sidebar-toc-btn{opacity:1}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc{position:fixed;top:0;left:0;width:300px;height:100%;padding:32px 0 48px 0;font-size:14px;box-shadow:0 0 4px rgba(150,150,150,.33);box-sizing:border-box;overflow:auto;background-color:inherit}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar{width:8px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-track{border-radius:10px;background-color:transparent}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc::-webkit-scrollbar-thumb{border-radius:5px;background-color:rgba(150,150,150,.66);border:4px solid rgba(150,150,150,.66);background-clip:content-box}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc a{text-decoration:none}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc{padding:0 16px}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link{display:inline;padding:.25rem 0}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link div,html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper .md-toc-link p{display:inline}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .md-sidebar-toc .md-toc .md-toc-link-wrapper.highlighted .md-toc-link{font-weight:800}html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{left:300px;width:calc(100% - 300px);padding:2em calc(50% - 457px - 300px / 2);margin:0;box-sizing:border-box}@media screen and (max-width:1274px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{padding:2em}}@media screen and (max-width:450px){html body[for=html-export]:not([data-presentation-mode])[html-show-sidebar-toc] .markdown-preview{width:100%}}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .markdown-preview{left:50%;transform:translateX(-50%)}html body[for=html-export]:not([data-presentation-mode]):not([html-show-sidebar-toc]) .md-sidebar-toc{display:none}
+/* Please visit the URL below for more information: */
+/*   https://shd101wyy.github.io/markdown-preview-enhanced/#/customize-css */
+
+      </style>
+      <!-- The content below will be included at the end of the <head> element. --><script type="text/javascript">
+  document.addEventListener("DOMContentLoaded", function () {
+    // your code here
+  });
+</script></head><body for="html-export">
+    
+    
+      <div class="crossnote markdown-preview  ">
+      
+<h1 id="introduction-to-gibbonedu-module-development">Introduction to GibbonEdu Module Development </h1>
+<h2 id="what-is-gibbonedu">What is GibbonEdu? </h2>
+<p>GibbonEdu is a powerful, flexible, and open-source school management system designed to streamline daily operations in educational institutions. It's built using modern PHP practices and follows a modular architecture, making it easy to extend and customize.</p>
+<h3 id="core-features-of-gibbonedu">Core Features of GibbonEdu </h3>
+<p>GibbonEdu comes with a wide range of built-in features to support school management:</p>
+<ul>
+<li>Student Information Management: Centralized storage and management of student data</li>
+<li>Attendance Tracking: Efficient recording and monitoring of student attendance</li>
+<li>Assessment &amp; Reporting: Comprehensive tools for grading and generating report cards</li>
+<li>Timetabling: Flexible scheduling of classes and activities</li>
+<li>Behavior Management: Tracking and responding to student behavior</li>
+<li>Parent Communication: Tools to keep parents informed and engaged</li>
+<li>Resource Management: Organizing and allocating school resources</li>
+<li>Library System: Managing book loans and library resources</li>
+</ul>
+<h2 id="modern-module-development-in-gibbonedu">Modern Module Development in GibbonEdu </h2>
+<p>GibbonEdu leverages contemporary PHP practices and tools to provide a robust development environment. Let's explore some key concepts and examples:</p>
+<h3 id="1-object-oriented-architecture">1. Object-Oriented Architecture </h3>
+<p>GibbonEdu uses object-oriented programming (OOP) principles to organize code into reusable, modular components. Here's an example of a modern GibbonEdu class:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Example of a modern GibbonEdu class</span>
+<span class="token keyword keyword-namespace">namespace</span> <span class="token package">Gibbon<span class="token punctuation">\</span>Module<span class="token punctuation">\</span>MyModule<span class="token punctuation">\</span>Domain</span><span class="token punctuation">;</span>
+
+<span class="token keyword keyword-class">class</span> <span class="token class-name-definition class-name">StudentManager</span>
+<span class="token punctuation">{</span>
+    <span class="token keyword keyword-protected">protected</span> <span class="token variable">$gateway</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-protected">protected</span> <span class="token variable">$validator</span><span class="token punctuation">;</span>
+
+    <span class="token keyword keyword-public">public</span> <span class="token keyword keyword-function">function</span> <span class="token function-definition function">__construct</span><span class="token punctuation">(</span><span class="token class-name type-declaration">StudentGateway</span> <span class="token variable">$gateway</span><span class="token punctuation">,</span> <span class="token class-name type-declaration">Validator</span> <span class="token variable">$validator</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{</span>
+        <span class="token this keyword">$this</span><span class="token operator">-&gt;</span><span class="token property">gateway</span> <span class="token operator">=</span> <span class="token variable">$gateway</span><span class="token punctuation">;</span>
+        <span class="token this keyword">$this</span><span class="token operator">-&gt;</span><span class="token property">validator</span> <span class="token operator">=</span> <span class="token variable">$validator</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+
+    <span class="token keyword keyword-public">public</span> <span class="token keyword keyword-function">function</span> <span class="token function-definition function">addStudent</span><span class="token punctuation">(</span><span class="token keyword type-hint keyword-array">array</span> <span class="token variable">$data</span><span class="token punctuation">)</span><span class="token punctuation">:</span> <span class="token class-name return-type">Result</span>
+    <span class="token punctuation">{</span>
+        <span class="token comment">// Validation and business logic would go here</span>
+        <span class="token keyword keyword-return">return</span> <span class="token this keyword">$this</span><span class="token operator">-&gt;</span><span class="token property">gateway</span><span class="token operator">-&gt;</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token variable">$data</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><p>In this example, we define a <code>StudentManager</code> class responsible for managing student-related operations. It uses dependency injection (more on this later) to receive its required dependencies (<code>StudentGateway</code> and <code>Validator</code>) through the constructor.</p>
+<h3 id="2-dependency-injection">2. Dependency Injection </h3>
+<p>Dependency Injection (DI) is a design pattern used in GibbonEdu to achieve loose coupling between classes. It allows for easier testing and maintenance. GibbonEdu uses a service container to manage dependencies:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Modern service container usage</span>
+<span class="token variable">$container</span> <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">Container</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// Register the StudentGateway in the container</span>
+<span class="token variable">$container</span><span class="token operator">-&gt;</span><span class="token function">set</span><span class="token punctuation">(</span><span class="token scope">StudentGateway<span class="token punctuation">::</span></span><span class="token keyword keyword-class">class</span><span class="token punctuation">,</span> <span class="token keyword keyword-function">function</span> <span class="token punctuation">(</span><span class="token variable">$c</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+    <span class="token keyword keyword-return">return</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">StudentGateway</span><span class="token punctuation">(</span><span class="token variable">$c</span><span class="token operator">-&gt;</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'db'</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token comment">// Retrieve an instance of StudentManager from the container</span>
+<span class="token variable">$manager</span> <span class="token operator">=</span> <span class="token variable">$container</span><span class="token operator">-&gt;</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token scope">StudentManager<span class="token punctuation">::</span></span><span class="token keyword keyword-class">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre><p>This approach allows GibbonEdu to automatically resolve and inject dependencies when creating objects, making your code more modular and easier to maintain.</p>
+<h3 id="3-database-abstraction">3. Database Abstraction </h3>
+<p>GibbonEdu uses a database abstraction layer to simplify database operations and improve security. The <code>QueryableGateway</code> class provides a fluent interface for building database queries:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Modern database interaction using QueryableGateway</span>
+<span class="token keyword keyword-class">class</span> <span class="token class-name-definition class-name">StudentGateway</span> <span class="token keyword keyword-extends">extends</span> <span class="token class-name">QueryableGateway</span>
+<span class="token punctuation">{</span>
+    <span class="token keyword keyword-private">private</span> <span class="token keyword keyword-static">static</span> <span class="token variable">$tableName</span> <span class="token operator">=</span> <span class="token string single-quoted-string">'gibbonStudent'</span><span class="token punctuation">;</span>
+    <span class="token keyword keyword-private">private</span> <span class="token keyword keyword-static">static</span> <span class="token variable">$primaryKey</span> <span class="token operator">=</span> <span class="token string single-quoted-string">'gibbonStudentID'</span><span class="token punctuation">;</span>
+
+    <span class="token keyword keyword-public">public</span> <span class="token keyword keyword-function">function</span> <span class="token function-definition function">selectActiveStudents</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+    <span class="token punctuation">{</span>
+        <span class="token keyword keyword-return">return</span> <span class="token this keyword">$this</span>
+            <span class="token operator">-&gt;</span><span class="token function">newQuery</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+            <span class="token operator">-&gt;</span><span class="token function">from</span><span class="token punctuation">(</span><span class="token this keyword">$this</span><span class="token operator">-&gt;</span><span class="token function">getTableName</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+            <span class="token operator">-&gt;</span><span class="token function">cols</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token string single-quoted-string">'gibbonStudentID'</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'firstName'</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'lastName'</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+            <span class="token operator">-&gt;</span><span class="token function">where</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'status = :status'</span><span class="token punctuation">)</span>
+            <span class="token operator">-&gt;</span><span class="token function">bindValue</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'status'</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'Full'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><p>This approach allows you to write database queries in a more object-oriented manner, improving readability and reducing the risk of SQL injection vulnerabilities.</p>
+<h3 id="4-form-handling">4. Form Handling </h3>
+<p>GibbonEdu provides a powerful Form API to simplify the creation and handling of HTML forms:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Modern form creation using Form API</span>
+<span class="token variable">$form</span> <span class="token operator">=</span> <span class="token scope">Form<span class="token punctuation">::</span></span><span class="token function">create</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'studentAdd'</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">''</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$form</span><span class="token operator">-&gt;</span><span class="token function">setFactory</span><span class="token punctuation">(</span><span class="token scope">DatabaseFormFactory<span class="token punctuation">::</span></span><span class="token function">create</span><span class="token punctuation">(</span><span class="token variable">$pdo</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token variable">$row</span> <span class="token operator">=</span> <span class="token variable">$form</span><span class="token operator">-&gt;</span><span class="token function">addRow</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token variable">$row</span><span class="token operator">-&gt;</span><span class="token function">addLabel</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'firstName'</span><span class="token punctuation">,</span> <span class="token function">__</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'First Name'</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token operator">-&gt;</span><span class="token function">description</span><span class="token punctuation">(</span><span class="token function">__</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Legal first name'</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+        <span class="token operator">-&gt;</span><span class="token function">required</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token variable">$row</span><span class="token operator">-&gt;</span><span class="token function">addTextField</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'firstName'</span><span class="token punctuation">)</span>
+        <span class="token operator">-&gt;</span><span class="token function">required</span><span class="token punctuation">(</span><span class="token punctuation">)</span>
+        <span class="token operator">-&gt;</span><span class="token function">maxLength</span><span class="token punctuation">(</span><span class="token number">30</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre><p>This code creates a form with a "First Name" field, complete with a label, description, and validation rules. The Form API handles the HTML generation, making it easier to create consistent and accessible forms.</p>
+<h3 id="5-table-display">5. Table Display </h3>
+<p>For displaying data in tables, GibbonEdu offers the DataTable class:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Modern table creation using DataTable</span>
+<span class="token variable">$table</span> <span class="token operator">=</span> <span class="token scope">DataTable<span class="token punctuation">::</span></span><span class="token function">create</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'students'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$table</span><span class="token operator">-&gt;</span><span class="token function">setTitle</span><span class="token punctuation">(</span><span class="token function">__</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Active Students'</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+
+<span class="token variable">$table</span><span class="token operator">-&gt;</span><span class="token function">addColumn</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'fullName'</span><span class="token punctuation">,</span> <span class="token function">__</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Name'</span><span class="token punctuation">)</span><span class="token punctuation">)</span>
+    <span class="token operator">-&gt;</span><span class="token function">sortable</span><span class="token punctuation">(</span><span class="token punctuation">[</span><span class="token string single-quoted-string">'surname'</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'preferredName'</span><span class="token punctuation">]</span><span class="token punctuation">)</span>
+    <span class="token operator">-&gt;</span><span class="token function">format</span><span class="token punctuation">(</span><span class="token keyword keyword-function">function</span> <span class="token punctuation">(</span><span class="token variable">$person</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+        <span class="token keyword keyword-return">return</span> <span class="token scope">Format<span class="token punctuation">::</span></span><span class="token function">name</span><span class="token punctuation">(</span><span class="token variable">$person</span><span class="token punctuation">[</span><span class="token string single-quoted-string">'title'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token variable">$person</span><span class="token punctuation">[</span><span class="token string single-quoted-string">'preferredName'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> 
+                            <span class="token variable">$person</span><span class="token punctuation">[</span><span class="token string single-quoted-string">'surname'</span><span class="token punctuation">]</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'Student'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token punctuation">}</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre><p>This code creates a table to display a list of active students. The DataTable class handles pagination, sorting, and formatting, providing a consistent user interface across the platform.</p>
+<h2 id="why-create-modules-for-gibbonedu">Why Create Modules for GibbonEdu? </h2>
+<p>Developing modules for GibbonEdu allows you to extend the platform's functionality without modifying the core system. Here are some key reasons and examples:</p>
+<h3 id="1-extend-core-functionality">1. Extend Core Functionality </h3>
+<p>Modules let you add new features to GibbonEdu. For example, you can add new menu items:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Example: Adding a new menu item</span>
+<span class="token variable">$actionRows</span><span class="token punctuation">[</span><span class="token punctuation">]</span> <span class="token operator">=</span> <span class="token punctuation">[</span>
+    <span class="token string single-quoted-string">'name'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'My Feature'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'precedence'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'0'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'category'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'Learning'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'description'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'Access my new feature'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'URLList'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'myfeature.php'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'entryURL'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'myfeature.php'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'entrySidebar'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'Y'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'menuShow'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'Y'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'defaultPermissionAdmin'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'Y'</span><span class="token punctuation">,</span>
+    <span class="token string single-quoted-string">'defaultPermissionTeacher'</span> <span class="token operator">=&gt;</span> <span class="token string single-quoted-string">'Y'</span>
+<span class="token punctuation">]</span><span class="token punctuation">;</span>
+</code></pre><p>This code adds a new menu item for your module, making it accessible from the main navigation.</p>
+<h3 id="2-integrate-with-core-systems">2. Integrate with Core Systems </h3>
+<p>Your modules can interact with GibbonEdu's core features. For instance, you can use the notification system:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Example: Integrating with the notification system</span>
+<span class="token variable">$event</span> <span class="token operator">=</span> <span class="token keyword keyword-new">new</span> <span class="token class-name">NotificationEvent</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'My Module'</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'New Update'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$event</span><span class="token operator">-&gt;</span><span class="token function">setNotificationText</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Something important happened!'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$event</span><span class="token operator">-&gt;</span><span class="token function">setActionLink</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'/modules/MyModule/view.php'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$event</span><span class="token operator">-&gt;</span><span class="token function">addRecipient</span><span class="token punctuation">(</span><span class="token variable">$gibbon</span><span class="token operator">-&gt;</span><span class="token property">session</span><span class="token operator">-&gt;</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'gibbonPersonID'</span><span class="token punctuation">)</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$event</span><span class="token operator">-&gt;</span><span class="token function">sendNotifications</span><span class="token punctuation">(</span><span class="token variable">$pdo</span><span class="token punctuation">,</span> <span class="token variable">$gibbon</span><span class="token operator">-&gt;</span><span class="token property">session</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre><p>This code creates and sends a notification using GibbonEdu's built-in notification system.</p>
+<h3 id="3-access-core-services">3. Access Core Services </h3>
+<p>GibbonEdu provides various services that your module can utilize. Here's an example using the mailer service:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Example: Using the core mailer service</span>
+<span class="token variable">$mail</span> <span class="token operator">=</span> <span class="token variable">$container</span><span class="token operator">-&gt;</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token scope">Mailer<span class="token punctuation">::</span></span><span class="token keyword keyword-class">class</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token variable">$mail</span><span class="token operator">-&gt;</span><span class="token function">setTemplate</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'myModule'</span><span class="token punctuation">)</span>
+     <span class="token operator">-&gt;</span><span class="token function">subject</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Important Update'</span><span class="token punctuation">)</span>
+     <span class="token operator">-&gt;</span><span class="token function">to</span><span class="token punctuation">(</span><span class="token variable">$recipientEmail</span><span class="token punctuation">)</span>
+     <span class="token operator">-&gt;</span><span class="token function">renderBody</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'myTemplate.twig.html'</span><span class="token punctuation">,</span> <span class="token punctuation">[</span>
+         <span class="token string single-quoted-string">'userName'</span> <span class="token operator">=&gt;</span> <span class="token variable">$userName</span><span class="token punctuation">,</span>
+         <span class="token string single-quoted-string">'content'</span> <span class="token operator">=&gt;</span> <span class="token variable">$content</span>
+     <span class="token punctuation">]</span><span class="token punctuation">)</span>
+     <span class="token operator">-&gt;</span><span class="token function">send</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+</code></pre><p>This code uses GibbonEdu's mailer service to send an email, leveraging existing templates and configuration.</p>
+<h2 id="best-practices-for-gibbonedu-module-development">Best Practices for GibbonEdu Module Development </h2>
+<p>When developing modules for GibbonEdu, it's important to follow these best practices:</p>
+<h3 id="1-use-modern-php-features">1. Use Modern PHP Features </h3>
+<p>Leverage modern PHP features to write cleaner, more maintainable code:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Use type hints and return types</span>
+<span class="token keyword keyword-public">public</span> <span class="token keyword keyword-function">function</span> <span class="token function-definition function">processStudent</span><span class="token punctuation">(</span><span class="token class-name type-declaration">Student</span> <span class="token variable">$student</span><span class="token punctuation">)</span><span class="token punctuation">:</span> <span class="token class-name return-type">Result</span>
+<span class="token punctuation">{</span>
+    <span class="token comment">// Processing logic here</span>
+<span class="token punctuation">}</span>
+
+<span class="token comment">// Use null coalescing operator for default values</span>
+<span class="token variable">$setting</span> <span class="token operator">=</span> <span class="token variable">$gibbon</span><span class="token operator">-&gt;</span><span class="token property">session</span><span class="token operator">-&gt;</span><span class="token function">get</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'setting'</span><span class="token punctuation">)</span> <span class="token operator">??</span> <span class="token string single-quoted-string">'default'</span><span class="token punctuation">;</span>
+</code></pre><h3 id="2-follow-coding-standards">2. Follow Coding Standards </h3>
+<p>Adhere to PSR-12 coding standards for consistency:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token comment">// Use PSR-12 coding standard</span>
+<span class="token keyword keyword-namespace">namespace</span> <span class="token package">Gibbon<span class="token punctuation">\</span>Module<span class="token punctuation">\</span>MyModule</span><span class="token punctuation">;</span>
+
+<span class="token keyword keyword-class">class</span> <span class="token class-name-definition class-name">MyClass</span>
+<span class="token punctuation">{</span>
+    <span class="token keyword keyword-private">private</span> <span class="token variable">$property</span><span class="token punctuation">;</span>
+
+    <span class="token keyword keyword-public">public</span> <span class="token keyword keyword-function">function</span> <span class="token function-definition function">myMethod</span><span class="token punctuation">(</span><span class="token punctuation">)</span><span class="token punctuation">:</span> <span class="token keyword return-type keyword-void">void</span>
+    <span class="token punctuation">{</span>
+        <span class="token comment">// Method implementation</span>
+    <span class="token punctuation">}</span>
+<span class="token punctuation">}</span>
+</code></pre><h3 id="3-implement-error-handling">3. Implement Error Handling </h3>
+<p>Use try-catch blocks for proper error handling:</p>
+<pre data-role="codeBlock" data-info="php" class="language-php php"><code><span class="token keyword keyword-try">try</span> <span class="token punctuation">{</span>
+    <span class="token variable">$result</span> <span class="token operator">=</span> <span class="token variable">$gateway</span><span class="token operator">-&gt;</span><span class="token function">insert</span><span class="token punctuation">(</span><span class="token variable">$data</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token variable">$session</span><span class="token operator">-&gt;</span><span class="token function">addMessage</span><span class="token punctuation">(</span><span class="token function">__</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Success'</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'success'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span> <span class="token keyword keyword-catch">catch</span> <span class="token punctuation">(</span><span class="token class-name">QueryException</span> <span class="token variable">$e</span><span class="token punctuation">)</span> <span class="token punctuation">{</span>
+    <span class="token variable">$session</span><span class="token operator">-&gt;</span><span class="token function">addMessage</span><span class="token punctuation">(</span><span class="token function">__</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Error'</span><span class="token punctuation">)</span><span class="token punctuation">,</span> <span class="token string single-quoted-string">'error'</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+    <span class="token scope">Log<span class="token punctuation">::</span></span><span class="token function">error</span><span class="token punctuation">(</span><span class="token string single-quoted-string">'Database error'</span><span class="token punctuation">,</span> <span class="token punctuation">[</span><span class="token string single-quoted-string">'exception'</span> <span class="token operator">=&gt;</span> <span class="token variable">$e</span><span class="token punctuation">]</span><span class="token punctuation">)</span><span class="token punctuation">;</span>
+<span class="token punctuation">}</span>
+</code></pre><h2 id="exercise-plan-your-first-gibbonedu-module">Exercise: Plan Your First GibbonEdu Module </h2>
+<p>To get started with module development, follow these steps:</p>
+<ol>
+<li>
+<p>Identify a Need</p>
+<ul>
+<li>What problem will your module solve?</li>
+<li>Who are the target users (e.g., teachers, students, administrators)?</li>
+<li>What core GibbonEdu features will your module interact with?</li>
+</ul>
+</li>
+<li>
+<p>Design the Solution<br>
+Create a basic structure for your module:</p>
+</li>
+</ol>
+<pre data-role="codeBlock" data-info="plaintext" class="language-plaintext plaintext"><code>My Module
+├── Features
+│   ├── Core Functionality (What will your module do?)
+│   ├── User Interface (How will users interact with your module?)
+│   └── Integration Points (How will it connect with other GibbonEdu features?)
+├── Data Structure
+│   ├── Database Tables (What data will you need to store?)
+│   └── Relationships (How does your data relate to existing GibbonEdu data?)
+└── User Roles
+    ├── Permissions (Who can access what in your module?)
+    └── Access Levels (What levels of access are needed?)
+</code></pre><ol start="3">
+<li>Technical Planning
+<ul>
+<li>Which GibbonEdu core services will you use (e.g., notification, mailer)?</li>
+<li>What new classes will you need to create?</li>
+<li>How will you handle data validation and error checking?</li>
+</ul>
+</li>
+</ol>
+<h2 id="next-steps">Next Steps </h2>
+<p>In the upcoming lessons, we'll dive deeper into setting up a modern development environment for GibbonEdu module development. We'll cover tools, workflows, and best practices to help you build robust and maintainable modules for GibbonEdu.</p>
+<p>Stay tuned for hands-on examples and step-by-step guides to bring your module ideas to life!</p>
+
+      </div>
+      
+      
+    
+    
+    
+    
+    
+    
+  
+    </body></html>

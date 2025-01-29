@@ -114,7 +114,7 @@ class AttendanceListener
                 return [$emailCount, $smsCount];
             }
             
-            $this->logger->debug('Processing notification event', ['eventId' => $event['id']);
+            $this->logger->debug('Processing notification event', ['eventId' => $event['id']]);
 
             // Get subscribers for this student
             $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, gibbonPerson.preferredName, gibbonPerson.surname,
