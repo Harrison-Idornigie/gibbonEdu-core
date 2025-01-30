@@ -68,14 +68,16 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     $criteria = array();
     $criteria['gibbonSchoolYearID'] = $session->get('gibbonSchoolYearID');
 
-    $sql = "SELECT assessment.*, gibbonPerson.surname, gibbonPerson.preferredName, gibbonFormGroup.name as formGroup
-            FROM extraReportAssessment AS assessment
-            JOIN gibbonPerson ON (assessment.studentID=gibbonPerson.gibbonPersonID)
+    $sql = "SELECT assessment.reportingPeriod, gibbonPerson.gibbonPersonID, gibbonPerson.surname, 
+            gibbonPerson.preferredName, gibbonFormGroup.name as formGroup, COUNT(assessment.assessmentID) as assessmentCount
+            FROM extraReportAssessment as assessment
+            JOIN gibbonPerson ON (assessment.gibbonPersonID=gibbonPerson.gibbonPersonID)
             JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
             JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
-            WHERE gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
-            GROUP BY assessment.studentID, assessment.reportingPeriod
-            ORDER BY reportingPeriod, formGroup, surname, preferredName";
+            WHERE gibbonPerson.status='Full'
+            AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+            GROUP BY assessment.gibbonPersonID, assessment.reportingPeriod, gibbonFormGroup.name
+            ORDER BY assessment.reportingPeriod, gibbonFormGroup.name, gibbonPerson.surname, gibbonPerson.preferredName";
 
     $result = $pdo->select($sql, $criteria);
 
@@ -89,9 +91,13 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         ->format(function($row) {
             return Format::name('', $row['preferredName'], $row['surname'], 'Student', true);
         });
-    
+    $table->addColumn('assessmentCount', __('Assessments'))
+        ->format(function($row) {
+            return $row['assessmentCount'];
+        });
+
     $table->addActionColumn()
-        ->addParam('studentID')
+        ->addParam('gibbonPersonID')
         ->addParam('reportingPeriod')
         ->format(function ($row, $actions) {
             $actions->addAction('view', __('View'))

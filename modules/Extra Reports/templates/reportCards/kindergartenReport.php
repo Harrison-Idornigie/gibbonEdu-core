@@ -9,7 +9,8 @@ use Gibbon\Services\Format;
 // Set page properties
 $page->breadcrumbs->add(__('Kindergarten Report Card'));
 
-if (empty($reportingPeriod) || empty($studentID)) {
+// Validate required parameters
+if (empty($reportingPeriod) || empty($gibbonPersonID)) {
     echo "<div class='error'>";
     echo __('Required parameters are missing.');
     echo "</div>";
@@ -103,7 +104,12 @@ $developmentChartSections = [
 ];
 
 // Get student data
-$student = getStudentData($studentID);
+$student = getStudentData($gibbonPersonID);
+
+if (empty($student)) {
+    return;
+}
+
 $reportingCycle = getReportingCycle($reportingPeriod);
 
 // Generate PDF content

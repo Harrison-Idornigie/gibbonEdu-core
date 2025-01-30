@@ -1,8 +1,8 @@
 <?php
 use Gibbon\Forms\Form;
-use Gibbon\Forms\DatabaseFormFactory;
-use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
+use Gibbon\Tables\DataTable;
+use Gibbon\Forms\DatabaseFormFactory;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -14,115 +14,125 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     // Proceed!
     $page->breadcrumbs->add(__('Enter Assessments'));
 
-    // Get URL parameters
-    $gibbonSchoolYearID = $session->get('gibbonSchoolYearID');
-    $search = $_GET['search'] ?? '';
-    $gibbonFormGroupID = $_GET['gibbonFormGroupID'] ?? '';
     $reportingPeriod = $_GET['reportingPeriod'] ?? '';
+    $formGroup = $_GET['formGroup'] ?? '';
     $template = $_GET['template'] ?? '';
+    $search = $_GET['search'] ?? '';
 
     // Filter form
     $form = Form::create('filter', $session->get('absoluteURL').'/index.php', 'get');
     $form->setFactory(DatabaseFormFactory::create($pdo));
-    $form->setClass('noIntBorder fullWidth');
-
+    
     $form->addHiddenValue('q', '/modules/'.$session->get('module').'/report_cards_enter.php');
-
+    
     $row = $form->addRow();
         $row->addLabel('reportingPeriod', __('Reporting Period'));
         $row->addSelect('reportingPeriod')
             ->fromArray(getReportingPeriods())
-            ->selected($reportingPeriod)
-            ->required();
-
-    $row = $form->addRow();
-        $row->addLabel('gibbonFormGroupID', __('Form Group'));
-        $row->addSelectFormGroup('gibbonFormGroupID', $gibbonSchoolYearID)
-            ->selected($gibbonFormGroupID)
+            ->placeholder()
             ->required()
-            ->placeholder();
-
+            ->selected($reportingPeriod);
+    
     $row = $form->addRow();
-        $row->addLabel('search', __('Search'))
-            ->description(__('Preferred Name, Surname'));
-        $row->addTextField('search')
-            ->setValue($search);
+        $row->addLabel('formGroup', __('Form Group'));
+        $row->addSelectFormGroup('formGroup', $session->get('gibbonSchoolYearID'))
+            ->placeholder()
+            ->required()
+            ->selected($formGroup);
 
     $row = $form->addRow();
         $row->addLabel('template', __('Template'));
         $row->addSelect('template')
             ->fromArray(getReportCardTemplates())
-            ->selected($template)
-            ->required();
+            ->placeholder()
+            ->required()
+            ->selected($template);
 
     $row = $form->addRow();
-        $row->addSearchSubmit($session);
+        $row->addLabel('search', __('Search'))
+            ->description(__('Search by student name'));
+        $row->addTextField('search')
+            ->setValue($search);
+
+    $row = $form->addRow();
+        $row->addSearchSubmit($session->get('absoluteURL'), __('Clear Filters'));
 
     echo $form->getOutput();
 
-    // Show student list if form group is selected
-    if (!empty($gibbonFormGroupID)) {
-        // Build query
-        $data = ['gibbonFormGroupID' => $gibbonFormGroupID, 'gibbonSchoolYearID' => $gibbonSchoolYearID];
-        $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, surname, preferredName, gibbonFormGroup.name as formGroup,
-                    (SELECT COUNT(*) FROM extraReportAssessment 
-                     WHERE studentID=gibbonPerson.gibbonPersonID 
-                     AND reportingPeriod=:reportingPeriod) as assessmentCount
+    // Check if required filters are set
+    if (!empty($formGroup) && !empty($reportingPeriod) && !empty($template)) {
+        // Query students
+        $data = [
+            'gibbonFormGroupID' => $formGroup,
+            'gibbonSchoolYearID' => $session->get('gibbonSchoolYearID')
+        ];
+        
+        $sql = "SELECT gibbonPerson.gibbonPersonID, surname, preferredName 
                 FROM gibbonPerson 
-                JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
-                JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
-                WHERE gibbonStudentEnrolment.gibbonFormGroupID=:gibbonFormGroupID 
-                AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+                JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID) 
+                WHERE gibbonFormGroupID=:gibbonFormGroupID 
+                AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID 
                 AND gibbonPerson.status='Full'";
 
         if (!empty($search)) {
-            $data['search1'] = "%$search%";
-            $data['search2'] = "%$search%";
-            $sql .= " AND (preferredName LIKE :search1 OR surname LIKE :search2)";
+            $data['search'] = '%'.$search.'%';
+            $sql .= " AND (preferredName LIKE :search OR surname LIKE :search)";
         }
-
-        $data['reportingPeriod'] = $reportingPeriod;
+        
         $sql .= " ORDER BY surname, preferredName";
         
-        $result = $pdo->select($sql, $data);
+        $students = $pdo->select($sql, $data);
 
-        // Render table
-        $table = DataTable::create('students');
-        $table->setTitle(__('Students'));
+        if ($students && $students->rowCount() > 0) {
+            // Render table
+            $table = DataTable::create('students');
+            $table->setTitle(__('Students'));
 
-        $table->addColumn('formGroup', __('Form Group'));
-        $table->addColumn('student', __('Student'))
-            ->format(function($row) {
-                return Format::name('', $row['preferredName'], $row['surname'], 'Student', true);
-            });
-        
-        $table->addColumn('status', __('Status'))
-            ->format(function($row) {
-                if ($row['assessmentCount'] > 0) {
-                    return Format::tag(__('Assessed'), 'success');
-                } else {
-                    return Format::tag(__('Not Assessed'), 'warning');
-                }
-            });
+            $table->addColumn('name', __('Name'))
+                ->format(Format::using('name', ['', 'preferredName', 'surname', 'Student', false]));
 
-        $table->addActionColumn()
-            ->addParam('q', '/modules/'.$session->get('module').'/report_cards_enter_student.php')
-            ->addParam('gibbonPersonID')
-            ->addParam('reportingPeriod', $reportingPeriod)
-            ->addParam('template', $template)
-            ->format(function ($row, $actions) {
-                if ($row['assessmentCount'] > 0) {
-                    $actions->addAction('edit', __('Edit Assessment'))
-                        ->setIcon('edit')
-                        ->setURL('/index.php');
-                } else {
-                    $actions->addAction('add', __('Enter Assessment'))
-                        ->setIcon('page_new')
-                        ->setURL('/index.php');
-                }
-            });
+            // Add status column to show if student has been assessed
+            $table->addColumn('status', __('Status'))
+                ->format(function($row) use ($pdo, $reportingPeriod) {
+                    if (empty($reportingPeriod)) return Format::tag(__('Not Assessed'), 'warning');
+                    
+                    $sql = "SELECT assessmentID 
+                            FROM extraReportAssessment 
+                            WHERE gibbonPersonID=:gibbonPersonID 
+                            AND reportingPeriod=:reportingPeriod";
+                    
+                    $data = [
+                        'gibbonPersonID' => $row['gibbonPersonID'],
+                        'reportingPeriod' => $reportingPeriod
+                    ];
+                    
+                    $count = $pdo->selectOne($sql, $data);
+                    
+                    return ($count && isset($count['assessmentID']) && $count['assessmentID'] > 0)
+                        ? Format::tag(__('Assessed'), 'success')
+                        : Format::tag(__('Not Assessed'), 'warning');
+                });
 
-        echo $table->render($result->toDataSet());
+            $table->addActionColumn()
+                ->addParam('q', '/modules/'.$session->get('module').'/report_cards_enter_student.php')
+                ->addParam('gibbonPersonID')
+                ->addParam('reportingPeriod', $reportingPeriod)
+                ->addParam('template', $template)
+                ->format(function ($row, $actions) use ($session) {
+                    $actions->addAction('edit', __('Enter Assessment'))
+                        ->setURL('/modules/'.$session->get('module').'/report_cards_enter_student.php');
+                });
+
+            echo $table->render($students->toDataSet());
+        } else {
+            echo "<div class='error'>";
+            echo __('No students found.');
+            echo "</div>";
+        }
+    } else if (isset($_GET['Go'])) {
+        echo "<div class='error'>";
+        echo __('Please select all required fields: Reporting Period, Form Group, and Template.');
+        echo "</div>";
     }
 }
 ?>

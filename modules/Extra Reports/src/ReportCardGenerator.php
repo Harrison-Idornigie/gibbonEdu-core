@@ -118,14 +118,14 @@ class ReportCardGenerator {
     private function getScoreForItem($section, $item) {
         global $pdo;
         
-        $data = ['studentID' => $this->student['gibbonPersonID'],
+        $data = ['gibbonPersonID' => $this->student['gibbonPersonID'],
                 'reportingPeriod' => $this->reportingCycle,
                 'section' => $section,
                 'item' => $item];
                 
         $sql = "SELECT score 
                 FROM extraReportAssessment 
-                WHERE studentID=:studentID 
+                WHERE gibbonPersonID=:gibbonPersonID 
                 AND reportingPeriod=:reportingPeriod 
                 AND section=:section 
                 AND item=:item";
@@ -180,13 +180,13 @@ class ReportCardGenerator {
     private function getAverageSectionScore($section) {
         global $pdo;
         
-        $data = ['studentID' => $this->student['gibbonPersonID'],
+        $data = ['gibbonPersonID' => $this->student['gibbonPersonID'],
                 'reportingPeriod' => $this->reportingCycle,
                 'section' => $section];
                 
         $sql = "SELECT AVG(score) as avgScore 
                 FROM extraReportAssessment 
-                WHERE studentID=:studentID 
+                WHERE gibbonPersonID=:gibbonPersonID 
                 AND reportingPeriod=:reportingPeriod 
                 AND section=:section";
                 

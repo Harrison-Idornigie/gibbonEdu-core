@@ -7,7 +7,6 @@ use Gibbon\Module\ExtraReports\ReportCardGenerator;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
-require_once __DIR__ . '/classes/ReportCardGenerator.php';
 
 if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards_manage.php') == false) {
     // Access denied
@@ -19,97 +18,53 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     $template = $_POST['template'] ?? '';
 
     if (empty($students) || empty($reportingPeriod) || empty($template)) {
-        $page->addError(__('You have not specified one or more required parameters.'));
-        return;
+        $URL .= '&return=error1';
+        header("Location: {$URL}");
+        exit;
     }
 
-    // Get template data
-    $templateFile = __DIR__ . "/templates/reportCards/{$template}Report.php";
-    if (!file_exists($templateFile)) {
-        $page->addError(__('The specified template cannot be found.'));
-        return;
-    }
-
-    // Include template to get sections
-    require $templateFile;
-
-    if (!isset($sections) || !is_array($sections)) {
-        $page->addError(__('Template is invalid: sections not defined.'));
-        return;
-    }
-
-    // Create report card generator
-    $generator = new ReportCardGenerator($pdo);
-
-    // Process each student
-    $successCount = 0;
-    $errorCount = 0;
-
-    foreach ($students as $studentID) {
-        // Get student data
-        $data = ['gibbonPersonID' => $studentID, 'gibbonSchoolYearID' => $session->get('gibbonSchoolYearID')];
-        $sql = "SELECT gibbonPerson.gibbonPersonID, surname, preferredName, gibbonFormGroup.name as formGroup
-                FROM gibbonPerson 
-                JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
-                JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
-                WHERE gibbonPerson.gibbonPersonID=:gibbonPersonID 
-                AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
-                AND gibbonPerson.status='Full'";
+    try {
+        global $pdo;
         
-        $student = $pdo->selectOne($sql, $data);
-
-        if (empty($student)) {
-            $errorCount++;
-            continue;
+        if (!isset($pdo)) {
+            throw new Exception('Database connection not available.');
         }
 
-        // Get assessment data
-        $assessmentData = [];
-        foreach ($sections as $sectionKey => $section) {
-            $assessmentData[$sectionKey] = [
-                'title' => $section['title'],
-                'items' => []
-            ];
+        // Process each selected student
+        foreach ($students as $gibbonPersonID) {
+            // Get student data
+            $data = ['gibbonPersonID' => $gibbonPersonID, 'gibbonSchoolYearID' => $session->get('gibbonSchoolYearID')];
+            $sql = "SELECT gibbonPerson.gibbonPersonID, surname, preferredName, gibbonFormGroup.name as formGroup
+                    FROM gibbonPerson 
+                    JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
+                    JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
+                    WHERE gibbonPerson.gibbonPersonID=:gibbonPersonID 
+                    AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+                    AND gibbonPerson.status='Full'";
+            
+            $result = $pdo->select($sql, $data);
+            $student = $result->fetch();
 
-            foreach ($section['items'] as $item) {
-                $data = [
-                    'studentID' => $studentID,
-                    'reportingPeriod' => $reportingPeriod,
-                    'section' => $sectionKey,
-                    'item' => $item
-                ];
-                
-                $sql = "SELECT score 
-                        FROM extraReportAssessment 
-                        WHERE studentID=:studentID 
-                        AND reportingPeriod=:reportingPeriod 
-                        AND section=:section 
-                        AND item=:item";
-                        
-                $result = $pdo->selectOne($sql, $data);
-                $assessmentData[$sectionKey]['items'][$item] = $result['score'] ?? null;
+            if (empty($student)) {
+                continue;
             }
+
+            // Load and process template
+            $templateFile = __DIR__ . '/templates/reportCards/' . $template . '.php';
+            if (!file_exists($templateFile)) {
+                throw new Exception('Template file not found: ' . $template);
+            }
+
+            // Include template file which will use ReportCardGenerator
+            include $templateFile;
         }
 
-        try {
-            // Generate PDF
-            $generator->generateReportCard($student, $reportingPeriod, $template, $assessmentData);
-            $successCount++;
-        } catch (Exception $e) {
-            $errorCount++;
-        }
+        $URL .= '&return=success0';
+    } catch (Exception $e) {
+        $URL .= '&return=error2';
+        error_log('Extra Reports: ' . $e->getMessage());
     }
 
-    // Show results
-    if ($successCount > 0) {
-        $page->addSuccess(sprintf(__('Successfully generated %1$s report cards.'), $successCount));
-    }
-    if ($errorCount > 0) {
-        $page->addError(sprintf(__('Failed to generate %1$s report cards.'), $errorCount));
-    }
-
-    // Return to manage page
-    header("Location: " . $session->get('absoluteURL') . '/index.php?q=/modules/' . $session->get('module') . '/report_cards_manage.php');
-    exit();
+    header("Location: {$URL}");
+    exit;
 }
-?>

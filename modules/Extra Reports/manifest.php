@@ -27,11 +27,17 @@ $version = '0.1.00';
 $author = 'Your Name';
 $url = '';
 
+// Autoloader
+$gibbonModuleClassLists[] = [
+    'prefix' => 'Gibbon\\Module\\ExtraReports\\',
+    'sourcePath' => 'src'
+];
+
 // Module tables
 $moduleTables = [
     "CREATE TABLE `extraReportAssessment` (
         `assessmentID` INT(10) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
-        `studentID` INT(10) UNSIGNED ZEROFILL NOT NULL,
+        `gibbonPersonID` INT(10) UNSIGNED ZEROFILL NOT NULL,
         `reportingPeriod` VARCHAR(50) NOT NULL,
         `section` VARCHAR(50) NOT NULL,
         `item` VARCHAR(255) NOT NULL,

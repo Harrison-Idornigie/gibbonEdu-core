@@ -21,19 +21,31 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     }
 
     // Get student info
-    $data = ['gibbonPersonID' => $gibbonPersonID, 'gibbonSchoolYearID' => $session->get('gibbonSchoolYearID')];
-    $sql = "SELECT gibbonPerson.gibbonPersonID, surname, preferredName, gibbonFormGroup.name as formGroup
-            FROM gibbonPerson 
-            JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
-            JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
-            WHERE gibbonPerson.gibbonPersonID=:gibbonPersonID 
-            AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
-            AND gibbonPerson.status='Full'";
-    
-    $student = $pdo->selectOne($sql, $data);
+    try {
+        global $pdo;
+        
+        if (!isset($pdo)) {
+            throw new Exception('Database connection not available.');
+        }
 
-    if (empty($student)) {
-        $page->addError(__('The specified record cannot be found.'));
+        $data = ['gibbonPersonID' => $gibbonPersonID, 'gibbonSchoolYearID' => $session->get('gibbonSchoolYearID')];
+        $sql = "SELECT gibbonPerson.gibbonPersonID, surname, preferredName, gibbonFormGroup.name as formGroup
+                FROM gibbonPerson 
+                JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
+                JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
+                WHERE gibbonPerson.gibbonPersonID=:gibbonPersonID 
+                AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+                AND gibbonPerson.status='Full'";
+        
+        $result = $pdo->select($sql, $data);
+        $student = $result->fetch();
+
+        if (empty($student)) {
+            $page->addError(__('The specified student cannot be found.'));
+            return;
+        }
+    } catch (Exception $e) {
+        $page->addError(__('Database connection failed: ').$e->getMessage());
         return;
     }
 
@@ -49,7 +61,6 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     }
 
     // Include template in a scope that preserves variables
-    $studentID = $gibbonPersonID; // Template expects $studentID
     require $templateFile;
     
     if (!isset($sections) || !is_array($sections)) {
@@ -58,12 +69,14 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     }
     
     // Assessment form
-    $form = Form::create('assessment', $session->get('absoluteURL').'/modules/'.$session->get('module').'/report_cards_enterProcess.php');
+    $form = Form::create('assessment', $session->get('absoluteURL').'/modules/'.$session->get('module').'/report_cards_enter_studentProcess.php', 'post');
     $form->setFactory(DatabaseFormFactory::create($pdo));
+
+    error_log("Extra Reports: Creating form with gibbonPersonID: $gibbonPersonID");
 
     $form->addHiddenValue('address', $session->get('address'));
     $form->addHiddenValue('reportingPeriod', $reportingPeriod);
-    $form->addHiddenValue('studentID', $gibbonPersonID);
+    $form->addHiddenValue('gibbonPersonID', $gibbonPersonID);
     $form->addHiddenValue('template', $template);
 
     // Student info
@@ -75,8 +88,13 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
 
     // Add assessment sections
     foreach ($sections as $sectionKey => $section) {
-        $form->addRow()->addHeading($section['title']);
+        $form->addRow()->addHeading($section['title'])->addClass('mt-4');
 
+        // Create a container for three columns
+        $row = $form->addRow();
+        $columnContainer = $row->addColumn()->addClass('grid grid-cols-3 gap-6 w-full');
+
+        $itemCount = 0;
         foreach ($section['items'] as $item) {
             // Get existing assessment
             $data = [
@@ -95,24 +113,43 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                     
             $result = $pdo->selectOne($sql, $data);
 
-            $row = $form->addRow();
-            $row->addLabel($sectionKey.'_'.$item, $item);
-            $col = $row->addColumn()->addClass('flex-1');
+            // Add each item to the column container instead of creating new rows
+            $itemDiv = $columnContainer->addColumn()->addClass('flex flex-col mb-6 bg-white rounded shadow-sm p-3');
+            $itemDiv->addLabel($sectionKey.'_'.$item, $item)->addClass('font-bold text-sm mb-2');
+            
+            $controlsDiv = $itemDiv->addColumn()->addClass('flex-1 space-y-2');
 
-            $col->addSelect($sectionKey.'_'.$item)
+            // Create the score select field with a specific name format
+            $scoreField = $controlsDiv->addSelect($sectionKey.'_'.$item)
                 ->fromArray(getAssessmentScores())
-                ->placeholder()
-                ->selected($result['score'] ?? '');
+                ->placeholder('Choose...')
+                ->required()
+                ->setClass('w-full mb-2');
 
-            $col->addTextArea($sectionKey.'_'.$item.'_comment')
-                ->setRows(2)
+            if (isset($result['score'])) {
+                $scoreField->selected($result['score']);
+            }
+
+            // Create the comment field with a specific name format
+            $commentField = $controlsDiv->addTextArea($sectionKey.'_'.$item.'_comment')
+                ->setRows(3)
                 ->setValue($result['comment'] ?? '')
+                ->setClass('w-full')
                 ->placeholder(__('Add a comment...'));
         }
     }
 
     $row = $form->addRow();
-        $row->addSubmit();
+        $row->addSubmit('Save Assessment');
+
+    // Debug output
+    echo "<!-- Form field names for debugging: -->\n";
+    echo "<!-- Hidden fields: address, reportingPeriod={$reportingPeriod}, gibbonPersonID={$gibbonPersonID}, template={$template} -->\n";
+    foreach ($sections as $sectionKey => $section) {
+        foreach ($section['items'] as $item) {
+            echo "<!-- Score field: {$sectionKey}_{$item}, Comment field: {$sectionKey}_{$item}_comment -->\n";
+        }
+    }
 
     echo $form->getOutput();
 }

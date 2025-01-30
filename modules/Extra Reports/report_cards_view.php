@@ -54,12 +54,12 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     // Build query
     $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID];
     $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, surname, preferredName, 
-                gibbonFormGroup.name as formGroup, extraReportAssessment.*
+                gibbonFormGroup.name as formGroup, extraReportAssessment.reportingPeriod
             FROM gibbonPerson 
+            JOIN extraReportAssessment ON (extraReportAssessment.gibbonPersonID=gibbonPerson.gibbonPersonID)
             JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
             JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
-            JOIN extraReportAssessment ON (extraReportAssessment.studentID=gibbonPerson.gibbonPersonID)
-            WHERE gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+            WHERE gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID 
             AND gibbonPerson.status='Full'";
 
     if (!empty($gibbonFormGroupID)) {
@@ -79,7 +79,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         $sql .= " AND (preferredName LIKE :search1 OR surname LIKE :search2 OR extraReportAssessment.item LIKE :search3)";
     }
 
-    $sql .= " ORDER BY surname, preferredName, reportingPeriod, section, item";
+    $sql .= " ORDER BY extraReportAssessment.reportingPeriod, surname, preferredName";
     $result = $pdo->select($sql, $data);
 
     // Render table
@@ -115,15 +115,14 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         ->format(Format::using('dateTime', ['timestamp' => 'timestamp']));
 
     $table->addActionColumn()
-        ->addParam('q', '/modules/'.$session->get('module').'/report_cards_enter_student.php')
+        ->addParam('q', '/modules/'.$session->get('module').'/report_cards_view_student.php')
         ->addParam('gibbonPersonID')
-        ->addParam('studentID')
         ->addParam('reportingPeriod')
         ->format(function ($row, $actions) {
-            $actions->addAction('edit', __('Edit'))
-                ->setIcon('edit')
-                ->addParam('studentID', $row['studentID'])
-                ->setURL('/index.php');
+            $actions->addAction('view', __('View'))
+                ->setURL('/modules/'.$session->get('module').'/report_cards_view_student.php')
+                ->addParam('gibbonPersonID', $row['gibbonPersonID'])
+                ->addParam('reportingPeriod', $row['reportingPeriod']);
         });
 
     echo $table->render($result->toDataSet());

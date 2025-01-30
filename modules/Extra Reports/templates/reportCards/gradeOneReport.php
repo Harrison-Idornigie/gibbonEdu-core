@@ -3,138 +3,68 @@
  * Grade One Report Card Template
  */
 
-use Gibbon\Forms\Form;
-use Gibbon\Services\Format;
-
-// Set page properties
-$page->breadcrumbs->add(__('Grade One Report Card'));
-
-if (empty($reportingPeriod) || empty($studentID)) {
-    echo "<div class='error'>";
-    echo __('Required parameters are missing.');
-    echo "</div>";
-    return;
-}
-
-// A3 page setup for PDF
-$pageProperties = [
-    'size' => 'A3',
-    'orientation' => 'P'
-];
-
 // Report card sections based on provided image
 $sections = [
     'spiritual' => [
         'title' => 'Spiritual',
         'items' => [
-            'I participate in Cree Class',
-            'I participate in Land Based Activities',
-            'I am spiritual',
-            'I can show respect to others',
-            'I can say or listen to our School Prayer and Morning Song',
-            'I can understand basic commands in Cree',
-            'I can use healthy Language with Myself and Others',
-            'I can follow Rules and Procedures'
+            'I am Spiritual',
+            'I listen and have been told Cree Nations',
+            'I participate in Cree class',
+            'I am proud of my culture and my language',
+            'I can say no thanks to the school prayer in Cree',
+            'I participate in Land Based activities',
+            'I can recognize the importance of relationships between people and animals',
+            'I can recognize the importance of relationships between people and plants',
+            'I can respect my environment',
+            'I can respect my classroom and materials'
         ]
     ],
     'social_emotional' => [
         'title' => 'Social-Emotional',
         'items' => [
-            'I can recognize when I need to self regulate',
+            'I can write my name',
+            'I can write neatly',
+            'I can follow classroom rules',
             'I can solve problems',
-            'I can understand different emotions',
-            'I can communicate my thoughts and feelings with others',
-            'I can be kind',
-            'I can be responsible',
-            'I can try my best',
-            'I can ask for help if needed',
-            'I can recognize and report unsafe activities',
-            'I can develop and maintain peer relationships'
+            'I can use art as a form of creative expression',
+            'I can describe family and friends',
+            'I can greet in quiet and aloud',
+            'I can communicate with my classmates'
         ]
     ],
     'physical' => [
         'title' => 'Physical',
         'items' => [
-            'I can correctly grasp scissors, pencils and manipulatives',
-            'I can get dressed and undressed independently',
-            'I can move my body in a safe manner',
-            'I can correctly use tools to',
-            'I can participate in Gym Class',
-            'I can participate in physical activities such as FOCUS Moves',
-            'I can demonstrate core stability',
-            'I can keep my environment clean and organized',
-            'I can read at home',
-            'I can respectfully use school equipment and property'
+            'I CAN USE MY WRITING UTENSILS TO DRAW CUT GLUE AND MANIPULATE WITH THEM',
+            'I CAN USE MY FINE MOTOR SKILLS FOR PRINTING AND WRITING',
+            'I CAN DRAW AND TRACE SHAPES',
+            'I CAN MOVE AROUND CLASSROOM',
+            'I FOLLOW POSITIONAL CUES MIDDLE BOTTOM BEHIND FRONT',
+            'I CAN DRAW BASIC OBJECTS AND LINES',
+            'I CAN DRAW A SIMPLE PERSON',
+            'I CAN RUN BALANCE CLIMB AND WALK',
+            'I CAN DRESS MYSELF PROPERLY',
+            'I CAN MOVE MY BODY WITH CONTROL IN ALL DIRECTIONS STEP HOP LINE',
+            'I CAN PARTICIPATE IN GYM CLASS',
+            'I REGULARLY STOP MY RUNNING AND RETURN TO CALM QUIET'
         ]
     ],
     'mental' => [
         'title' => 'Mental',
         'items' => [
-            'I can identify patterns',
-            'I can correctly form Uppercase and Lowercase Letters and Numbers',
-            'I can use comprehension strategies',
-            'I can use phonemic skills to problem solve',
-            'I can demonstrate basic sentence structure',
-            'I can count to 100 by 1s, 2s, 5s, and 10s',
-            'I can understand numbers positionally, ordinally, symbolically and word',
-            'I can use Math Strategies when',
-            'I can create and recognize patterns'
+            'I CAN RECOGNIZE LETTERS IN LIGHT TO DARK OF THE ALPHABET',
+            'I CAN WRITE COUNTING 1-5',
+            'I CAN RECOGNIZE THE NUMBERS NAMES 1-10',
+            'I CAN FIND THE RIGHT PARTS - COMMUNICATION SYLLABICS',
+            'I CAN LISTEN REGULARLY',
+            'I CAN MATCH EXPLORING AND COMPARING 1, 2, 3, 4, 7',
+            'I CAN LISTEN TO A STORY IN A BOOK TO SIT PATIENTLY',
+            'I CAN LISTEN AND REPEAT SONGS RHYMES AND STORIES',
+            'I CAN LISTEN AND REPEAT SONGS POEMS RHYMES NURSERY',
+            'I CAN LISTEN AND FOLLOW DIRECTIONS',
+            'I CAN LISTEN AND LEARNING LANGUAGE AND LITERACY'
         ]
     ]
 ];
-
-// Assessment scale
-$assessmentScale = [
-    'green' => 'Meeting the MINIMUM Standards',
-    'yellow' => 'Meets some of the MINIMUM Standards',
-    'red' => 'Does not meet the MINIMUM Standards'
-];
-
-// Development chart sections
-$developmentChartSections = [
-    'Mental',
-    'Physical',
-    'Emotional',
-    'Spiritual',
-    'Indigenous Pedagogies',
-    'Core',
-    'FOCUS'
-];
-
-// Get student data
-$student = getStudentData($studentID);
-$reportingCycle = getReportingCycle($reportingPeriod);
-
-// Generate PDF content
-generateReportCardPDF($student, $reportingCycle, $sections, $assessmentScale, $developmentChartSections, $pageProperties);
-
-/**
- * Helper functions would be defined here
- */
-
-function generateReportCardPDF($student, $reportingCycle, $sections, $assessmentScale, $developmentChartSections, $pageProperties) {
-    // TODO: Implement PDF generation using a library like TCPDF or FPDF
-    // This is a placeholder function that needs to be implemented
-    // based on your specific PDF generation requirements
-}
-
-function getStudentData($studentID) {
-    global $pdo;
-    
-    $data = $pdo->selectOne('SELECT gibbonPerson.*, gibbonStudentEnrolment.* 
-        FROM gibbonPerson 
-        JOIN gibbonStudentEnrolment ON gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID 
-        WHERE gibbonPerson.gibbonPersonID=:studentID', ['studentID' => $studentID]);
-    
-    return $data;
-}
-
-function getReportingCycle($reportingPeriod) {
-    // TODO: Implement actual reporting cycle data retrieval
-    return [
-        'name' => $reportingPeriod,
-        'startDate' => '',
-        'endDate' => ''
-    ];
-}
 ?>
