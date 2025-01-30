@@ -36,15 +36,16 @@ $gibbonModuleClassLists[] = [
 // Module tables
 $moduleTables = [
     "CREATE TABLE `extraReportAssessment` (
-        `assessmentID` INT(10) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
-        `gibbonPersonID` INT(10) UNSIGNED ZEROFILL NOT NULL,
-        `reportingPeriod` VARCHAR(50) NOT NULL,
-        `section` VARCHAR(50) NOT NULL,
-        `item` VARCHAR(255) NOT NULL,
-        `score` INT(1) NOT NULL DEFAULT 0,
-        `comment` TEXT NULL DEFAULT NULL,
+        `extraReportAssessmentID` int(10) unsigned zerofill NOT NULL AUTO_INCREMENT,
+        `gibbonPersonIDStudent` int(10) unsigned zerofill NOT NULL,
+        `gibbonPersonIDTeacher` int(10) unsigned zerofill NOT NULL,
+        `gibbonSchoolYearTermID` int(10) unsigned zerofill NOT NULL,
+        `template` VARCHAR(50) NOT NULL,
+        `assessmentData` TEXT NOT NULL,
+        `comment` TEXT NOT NULL,
         `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (`assessmentID`)
+        PRIMARY KEY (`extraReportAssessmentID`),
+        UNIQUE KEY `student_term_template` (`gibbonPersonIDStudent`,`gibbonSchoolYearTermID`,`template`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;",
     
     "CREATE TABLE `extraReportTemplate` (

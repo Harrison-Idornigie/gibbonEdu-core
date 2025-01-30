@@ -3,6 +3,7 @@ use Gibbon\Forms\Form;
 use Gibbon\Services\Format;
 use Gibbon\Tables\DataTable;
 use Gibbon\Forms\DatabaseFormFactory;
+use Gibbon\Domain\School\SchoolYearTermGateway;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -25,10 +26,19 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     
     $form->addHiddenValue('q', '/modules/'.$session->get('module').'/report_cards_enter.php');
     
+    // Get available terms for the current school year
+    $termGateway = $container->get(SchoolYearTermGateway::class);
+    $terms = $termGateway->selectTermsBySchoolYear((int) $session->get('gibbonSchoolYearID'))->fetchAll();
+    
+    $termOptions = array_reduce($terms, function($group, $item) {
+        $group[$item['gibbonSchoolYearTermID']] = $item['name'];
+        return $group;
+    }, []);
+    
     $row = $form->addRow();
-        $row->addLabel('reportingPeriod', __('Reporting Period'));
+        $row->addLabel('reportingPeriod', __('Term'));
         $row->addSelect('reportingPeriod')
-            ->fromArray(getReportingPeriods())
+            ->fromArray($termOptions)
             ->placeholder()
             ->required()
             ->selected($reportingPeriod);
@@ -96,19 +106,19 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                 ->format(function($row) use ($pdo, $reportingPeriod) {
                     if (empty($reportingPeriod)) return Format::tag(__('Not Assessed'), 'warning');
                     
-                    $sql = "SELECT assessmentID 
+                    $sql = "SELECT extraReportAssessmentID 
                             FROM extraReportAssessment 
-                            WHERE gibbonPersonID=:gibbonPersonID 
-                            AND reportingPeriod=:reportingPeriod";
+                            WHERE gibbonPersonIDStudent=:gibbonPersonID 
+                            AND gibbonSchoolYearTermID=:gibbonSchoolYearTermID";
                     
                     $data = [
                         'gibbonPersonID' => $row['gibbonPersonID'],
-                        'reportingPeriod' => $reportingPeriod
+                        'gibbonSchoolYearTermID' => $reportingPeriod
                     ];
                     
-                    $count = $pdo->selectOne($sql, $data);
+                    $result = $pdo->select($sql, $data);
                     
-                    return ($count && isset($count['assessmentID']) && $count['assessmentID'] > 0)
+                    return ($result && $result->rowCount() > 0)
                         ? Format::tag(__('Assessed'), 'success')
                         : Format::tag(__('Not Assessed'), 'warning');
                 });
@@ -116,7 +126,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
             $table->addActionColumn()
                 ->addParam('q', '/modules/'.$session->get('module').'/report_cards_enter_student.php')
                 ->addParam('gibbonPersonID')
-                ->addParam('reportingPeriod', $reportingPeriod)
+                ->addParam('gibbonSchoolYearTermID', $reportingPeriod)
                 ->addParam('template', $template)
                 ->format(function ($row, $actions) use ($session) {
                     $actions->addAction('edit', __('Enter Assessment'))
@@ -131,7 +141,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         }
     } else if (isset($_GET['Go'])) {
         echo "<div class='error'>";
-        echo __('Please select all required fields: Reporting Period, Form Group, and Template.');
+        echo __('Please select all required fields: Term, Form Group, and Template.');
         echo "</div>";
     }
 }

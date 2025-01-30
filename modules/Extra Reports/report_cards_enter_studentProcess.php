@@ -35,36 +35,18 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     // Proceed!
     error_log("Extra Reports: POST data received: " . print_r($_POST, true));
     
-    $reportingPeriod = $_POST['reportingPeriod'] ?? '';
+    $gibbonSchoolYearTermID = $_POST['gibbonSchoolYearTermID'] ?? '';
     $gibbonPersonID = $_POST['gibbonPersonID'] ?? '';
     $template = $_POST['template'] ?? '';
 
-    error_log("Extra Reports: Extracted values - gibbonPersonID: $gibbonPersonID, reportingPeriod: $reportingPeriod, template: $template");
+    error_log("Extra Reports: Extracted values - gibbonPersonID: $gibbonPersonID, gibbonSchoolYearTermID: $gibbonSchoolYearTermID, template: $template");
 
     // Add these parameters to URL for redirect
-    $URL .= "&gibbonPersonID={$gibbonPersonID}&reportingPeriod={$reportingPeriod}&template={$template}";
+    $URL .= "&gibbonPersonID={$gibbonPersonID}&gibbonSchoolYearTermID={$gibbonSchoolYearTermID}&template={$template}";
  
     // Validate required values
-    if (empty($reportingPeriod) || empty($gibbonPersonID) || empty($template)) {
-        error_log("Extra Reports: Missing required values - Student: $gibbonPersonID, Period: $reportingPeriod, Template: $template");
-        $URL .= '&return=error1';
-        header("Location: {$URL}");
-        exit;
-    }
-
-    // Load template to get sections
-    $templateFile = __DIR__ . "/templates/reportCards/{$template}Report.php";
-    if (!file_exists($templateFile)) {
-        error_log("Extra Reports: Template file not found - $templateFile");
-        $URL .= '&return=error1';
-        header("Location: {$URL}");
-        exit;
-    }
-
-    require $templateFile;
-
-    if (!isset($sections) || !is_array($sections)) {
-        error_log("Extra Reports: Template sections not defined properly");
+    if (empty($gibbonSchoolYearTermID) || empty($gibbonPersonID) || empty($template)) {
+        error_log("Extra Reports: Missing required values - Student: $gibbonPersonID, Term: $gibbonSchoolYearTermID, Template: $template");
         $URL .= '&return=error1';
         header("Location: {$URL}");
         exit;
@@ -77,86 +59,171 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
             throw new Exception('Database connection not available.');
         }
 
-        $inserted = 0;
-        $updated = 0;
+        // Load template to get full item names
+        $templateFile = __DIR__ . "/templates/reportCards/{$template}Report.php";
+        require $templateFile;
         
-        // Process each section
+        // Debug log the template sections and items
+        error_log("Extra Reports: Template loaded with sections: " . print_r(array_keys($sections), true));
         foreach ($sections as $sectionKey => $section) {
+            error_log("Extra Reports: Section '$sectionKey' has " . count($section['items']) . " items: " . print_r($section['items'], true));
+        }
+        
+        // Create reverse mapping of md5 hashes to full item names
+        $itemMap = [];
+        foreach ($sections as $sectionKey => $section) {
+            error_log("Extra Reports: Processing section '$sectionKey'");
             foreach ($section['items'] as $item) {
-                $scoreKey = $sectionKey.'_'.$item;
-                $commentKey = $sectionKey.'_'.$item.'_comment';
+                $hash = md5($item);
+                $itemMap[$hash] = [
+                    'section' => $sectionKey,
+                    'name' => $item
+                ];
+                error_log("Extra Reports: Added mapping - Hash: $hash, Section: $sectionKey, Item: $item");
+            }
+        }
+
+        // Collect all assessment data from the form
+        $assessmentData = [];
+        
+        // Debug log ALL POST data in detail
+        error_log("Extra Reports: === START POST DATA DUMP ===");
+        foreach ($_POST as $key => $value) {
+            error_log("Extra Reports: POST field - Key: '$key', Value: '$value'");
+            if (strpos($key, 'assessment_') === 0) {
+                // Extract section and type from the field name
+                $fieldParts = explode('_', $key);
+                $lastPart = array_pop($fieldParts); // Get type (score/comment)
+                $hash = array_pop($fieldParts); // Get hash
+                array_shift($fieldParts); // Remove 'assessment'
+                $section = implode('_', $fieldParts); // Rejoin remaining parts for section name
                 
-                $score = $_POST[$scoreKey] ?? '';
-                $comment = $_POST[$commentKey] ?? '';
-
-                error_log("Extra Reports: Processing assessment - Section: $sectionKey, Item: $item, Score: $score");
-
-                if (!empty($score)) {
-                    // Check if assessment exists
-                    $data = [
-                        'gibbonPersonID' => $gibbonPersonID,
-                        'reportingPeriod' => $reportingPeriod,
-                        'section' => $sectionKey,
-                        'item' => $item
-                    ];
+                error_log("Extra Reports: - Section: '{$section}'");
+                error_log("Extra Reports: - Hash: '{$hash}'");
+                error_log("Extra Reports: - Type: '{$lastPart}'");
+                
+                if (isset($itemMap[$hash])) {
+                    error_log("Extra Reports: - Maps to: Section='{$itemMap[$hash]['section']}', Item='{$itemMap[$hash]['name']}'");
+                } else {
+                    error_log("Extra Reports: - NO MAPPING FOUND FOR HASH");
+                }
+            }
+        }
+        error_log("Extra Reports: === END POST DATA DUMP ===");
+        
+        // Initialize all sections from template with their items
+        foreach ($sections as $sectionKey => $section) {
+            $assessmentData[$sectionKey] = [];
+            foreach ($section['items'] as $item) {
+                $assessmentData[$sectionKey][$item] = [
+                    'score' => null,
+                    'comment' => ''
+                ];
+            }
+            error_log("Extra Reports: Initialized section: $sectionKey with " . count($section['items']) . " items");
+        }
+        
+        foreach ($_POST as $key => $value) {
+            if (strpos($key, 'assessment_') === 0) {
+                // Extract section and type from the field name
+                $fieldParts = explode('_', $key);
+                $type = array_pop($fieldParts); // Get type (score/comment)
+                $hash = array_pop($fieldParts); // Get hash
+                array_shift($fieldParts); // Remove 'assessment'
+                $section = implode('_', $fieldParts); // Rejoin remaining parts for section name
+                
+                error_log("Extra Reports: Processing field - Key: $key");
+                error_log(" - Section: $section");
+                error_log(" - Hash: $hash");
+                error_log(" - Type: $type");
+                
+                // Get the full item name and section from the hash
+                if (isset($itemMap[$hash])) {
+                    $mappedSection = $itemMap[$hash]['section'];
+                    $itemName = $itemMap[$hash]['name'];
                     
-                    $sql = "SELECT assessmentID 
-                            FROM extraReportAssessment 
-                            WHERE gibbonPersonID=:gibbonPersonID 
-                            AND reportingPeriod=:reportingPeriod 
-                            AND section=:section 
-                            AND item=:item";
-                            
-                    $result = $pdo->select($sql, $data);
-                    $existing = $result->fetch();
+                    error_log("Extra Reports: Found mapping - Section: $mappedSection, Item: $itemName, Type: $type, Value: $value");
                     
-                    if ($existing && isset($existing['assessmentID'])) {
-                        // Update existing
-                        $data = [
-                            'score' => $score,
-                            'comment' => $comment,
-                            'assessmentID' => $existing['assessmentID']
-                        ];
-                        
-                        $sql = "UPDATE extraReportAssessment 
-                                SET score=:score, comment=:comment 
-                                WHERE assessmentID=:assessmentID";
-                                
-                        $updated += $pdo->update($sql, $data);
-                        error_log("Extra Reports: Updated assessment ID: ".$existing['assessmentID']);
+                    // Store the value - for scores, use numeric value directly
+                    if ($type === 'score') {
+                        $score = is_numeric($value) && in_array((int)$value, [1, 2, 3]) ? (int)$value : null;
+                        $assessmentData[$mappedSection][$itemName][$type] = $score;
+                        error_log("Extra Reports: Stored score - Section: $mappedSection, Item: $itemName, Score: $score");
                     } else {
-                        // Insert new
-                        $data = [
-                            'gibbonPersonID' => $gibbonPersonID,
-                            'reportingPeriod' => $reportingPeriod,
-                            'section' => $sectionKey,
-                            'item' => $item,
-                            'score' => $score,
-                            'comment' => $comment
-                        ];
-                        
-                        $sql = "INSERT INTO extraReportAssessment 
-                                (gibbonPersonID, reportingPeriod, section, item, score, comment) 
-                                VALUES 
-                                (:gibbonPersonID, :reportingPeriod, :section, :item, :score, :comment)";
-                                
-                        $inserted += $pdo->insert($sql, $data);
-                        error_log("Extra Reports: Inserted new assessment");
+                        $assessmentData[$mappedSection][$itemName][$type] = $value;
+                        error_log("Extra Reports: Stored comment - Section: $mappedSection, Item: $itemName");
                     }
+                } else {
+                    error_log("Extra Reports: WARNING - No mapping found for hash: $hash");
+                    error_log("Extra Reports: Available mappings: " . print_r($itemMap, true));
                 }
             }
         }
 
-        error_log("Extra Reports: Finished processing - Inserted: $inserted, Updated: $updated");
+        error_log("Extra Reports: Final assessment data structure: " . print_r($assessmentData, true));
 
-        // Success
+        // Get teacher ID
+        $gibbonPersonIDTeacher = $session->get('gibbonPersonID');
+
+        // Check if an assessment already exists
+        $data = [
+            'gibbonPersonIDStudent' => $gibbonPersonID,
+            'gibbonSchoolYearTermID' => $gibbonSchoolYearTermID,
+            'template' => $template
+        ];
+
+        $sql = "SELECT extraReportAssessmentID FROM extraReportAssessment 
+                WHERE gibbonPersonIDStudent=:gibbonPersonIDStudent 
+                AND gibbonSchoolYearTermID=:gibbonSchoolYearTermID 
+                AND template=:template";
+                
+        $result = $pdo->select($sql, $data);
+
+        if ($result->rowCount() > 0) {
+            // Update existing assessment
+            $updateData = [
+                'assessmentData' => json_encode($assessmentData),
+                'comment' => $_POST['comment'] ?? '',
+                'gibbonPersonIDTeacher' => $gibbonPersonIDTeacher,
+                'extraReportAssessmentID' => $result->fetch()['extraReportAssessmentID']
+            ];
+
+            $sql = "UPDATE extraReportAssessment 
+                    SET assessmentData=:assessmentData, 
+                        comment=:comment,
+                        gibbonPersonIDTeacher=:gibbonPersonIDTeacher,
+                        timestamp=NOW()
+                    WHERE extraReportAssessmentID=:extraReportAssessmentID";
+                    
+            $pdo->update($sql, $updateData);
+        } else {
+            // Create new assessment
+            $insertData = [
+                'gibbonPersonIDStudent' => $gibbonPersonID,
+                'gibbonSchoolYearTermID' => $gibbonSchoolYearTermID,
+                'template' => $template,
+                'assessmentData' => json_encode($assessmentData),
+                'comment' => $_POST['comment'] ?? '',
+                'gibbonPersonIDTeacher' => $gibbonPersonIDTeacher
+            ];
+
+            $sql = "INSERT INTO extraReportAssessment 
+                    (gibbonPersonIDStudent, gibbonSchoolYearTermID, template, 
+                     assessmentData, comment, gibbonPersonIDTeacher, timestamp) 
+                    VALUES 
+                    (:gibbonPersonIDStudent, :gibbonSchoolYearTermID, :template,
+                     :assessmentData, :comment, :gibbonPersonIDTeacher, NOW())";
+                     
+            $pdo->insert($sql, $insertData);
+        }
+        
+        error_log("Extra Reports: SQL executed successfully");
         $URL .= '&return=success0';
-        header("Location: {$URL}");
-        exit;
     } catch (Exception $e) {
-        error_log("Extra Reports: Error saving assessments - " . $e->getMessage());
+        error_log("Extra Reports: Error saving assessment - " . $e->getMessage());
         $URL .= '&return=error2';
-        header("Location: {$URL}");
-        exit;
     }
+
+    header("Location: {$URL}");
+    exit;
 }

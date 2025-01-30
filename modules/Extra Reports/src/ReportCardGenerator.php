@@ -135,26 +135,37 @@ class ReportCardGenerator {
     }
 
     private function addDevelopmentChart() {
-        // Center point of the chart
+        // Center point and dimensions
         $centerX = 150;
         $centerY = 150;
-        $radius = 80;
-        
-        // Draw sections
-        $numSections = count($this->chartSections);
-        $anglePerSection = 360 / $numSections;
-        
-        for ($i = 0; $i < $numSections; $i++) {
-            $startAngle = $i * $anglePerSection;
-            $endAngle = ($i + 1) * $anglePerSection;
+        $outerRadius = 80;
+        $innerRadius = 40;
+        $spokeLength = $outerRadius;
+
+        // Define chart sections (clockwise from top)
+        $chartSections = [
+            'Mental' => ['angle' => 0],
+            'E.Y.E Testing' => ['angle' => 45],
+            'Focus' => ['angle' => 90],
+            'Emotional' => ['angle' => 135],
+            'E.Y.E Testing' => ['angle' => 180],
+            'WITS' => ['angle' => 225],
+            'Spiritual' => ['angle' => 270],
+            'Indigenous Pedagogies' => ['angle' => 315]
+        ];
+
+        // Draw outer circle sections
+        foreach ($chartSections as $section => $props) {
+            $startAngle = $props['angle'];
+            $endAngle = $startAngle + 45; // Each section is 45 degrees
             
             // Get average score for this section
-            $score = $this->getAverageSectionScore($this->chartSections[$i]);
+            $score = $this->getAverageSectionScore($section);
             
             // Set color based on score
             switch ($score) {
                 case 3:
-                    $this->pdf->SetFillColor(0, 255, 0); // Green
+                    $this->pdf->SetFillColor(0, 200, 0); // Green
                     break;
                 case 2:
                     $this->pdf->SetFillColor(255, 255, 0); // Yellow
@@ -167,14 +178,54 @@ class ReportCardGenerator {
             }
             
             // Draw filled sector
-            $this->pdf->PieSector($centerX, $centerY, $radius, $startAngle, $endAngle, 'FD');
+            $this->pdf->PieSector($centerX, $centerY, $outerRadius, $startAngle, $endAngle, 'FD');
             
             // Add section label
-            $labelAngle = deg2rad($startAngle + ($anglePerSection/2));
-            $labelX = $centerX + cos($labelAngle) * ($radius + 10);
-            $labelY = $centerY + sin($labelAngle) * ($radius + 10);
-            $this->pdf->Text($labelX, $labelY, $this->chartSections[$i]);
+            $labelAngle = deg2rad($startAngle + 22.5); // Midpoint of the 45-degree section
+            $labelX = $centerX + cos($labelAngle) * ($outerRadius + 15);
+            $labelY = $centerY + sin($labelAngle) * ($outerRadius + 15);
+            
+            // Rotate text based on position
+            $textAngle = $startAngle + 22.5;
+            if ($textAngle > 90 && $textAngle < 270) {
+                $textAngle += 180; // Flip text for better readability
+            }
+            
+            $this->pdf->StartTransform();
+            $this->pdf->Rotate($textAngle, $labelX, $labelY);
+            $this->pdf->SetFont('helvetica', '', 8);
+            $this->pdf->Text($labelX, $labelY, $section);
+            $this->pdf->StopTransform();
         }
+
+        // Draw spokes (dividing lines)
+        $this->pdf->SetLineWidth(0.5);
+        $this->pdf->SetDrawColor(0, 0, 0);
+        foreach ($chartSections as $section => $props) {
+            $angle = deg2rad($props['angle']);
+            $endX = $centerX + cos($angle) * $spokeLength;
+            $endY = $centerY + sin($angle) * $spokeLength;
+            $this->pdf->Line($centerX, $centerY, $endX, $endY);
+        }
+
+        // Draw inner circles for special indicators
+        $this->drawSpecialIndicator($centerX, $centerY, $innerRadius, 'Dramatic Play');
+        $this->drawSpecialIndicator($centerX - 100, $centerY + 100, $innerRadius, 'Read Alouds');
+    }
+
+    private function drawSpecialIndicator($x, $y, $radius, $label) {
+        // Draw outer circle
+        $this->pdf->SetLineWidth(0.5);
+        $this->pdf->SetDrawColor(0, 0, 0);
+        $this->pdf->Circle($x, $y, $radius);
+
+        // Draw cross lines
+        $this->pdf->Line($x - $radius, $y, $x + $radius, $y);
+        $this->pdf->Line($x, $y - $radius, $x, $y + $radius);
+
+        // Add label
+        $this->pdf->SetFont('helvetica', '', 8);
+        $this->pdf->Text($x - 15, $y + $radius + 5, $label);
     }
 
     private function getAverageSectionScore($section) {

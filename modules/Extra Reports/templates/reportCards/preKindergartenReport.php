@@ -15,8 +15,8 @@ $sections = [
             'I participate in Land Based activities'
         ]
     ],
-    'social_emotional' => [
-        'title' => 'Social-Emotional',
+    'emotional' => [
+        'title' => 'Emotional',
         'items' => [
             'I can write my name',
             'I can follow classroom rules',
@@ -50,6 +50,46 @@ $sections = [
             'I can match similar objects',
             'I can identify basic colors',
             'I can identify basic shapes'
+        ]
+    ]
+];
+
+// Development Chart Sections
+$developmentSections = [
+    'mental' => [
+        'title' => 'Mental',
+        'subsections' => [
+            'eye_testing' => 'E.Y.E Testing',
+            'focus' => 'Focus',
+            'gross_motor' => 'Gross Motor',
+            'fine_motor' => 'Fine Motor',
+            'dramatic_play' => 'Dramatic Play',
+            'read_alouds' => 'Read Alouds'
+        ]
+    ],
+    'emotional' => [
+        'title' => 'Emotional',
+        'subsections' => [
+            'eye_testing' => 'E.Y.E Testing',
+            'focus' => 'Focus'
+        ]
+    ],
+    'spiritual' => [
+        'title' => 'Spiritual',
+        'subsections' => [
+            'indigenous_pedagogies' => 'Indigenous Pedagogies',
+            'focus' => 'Focus',
+            'wits' => 'WITS',
+            'values' => 'Values'
+        ]
+    ],
+    'physical' => [
+        'title' => 'Physical',
+        'subsections' => [
+            'eye_testing' => 'E.Y.E Testing',
+            'focus' => 'Focus',
+            'gross_motor' => 'Gross Motor',
+            'fine_motor' => 'Fine Motor'
         ]
     ]
 ];

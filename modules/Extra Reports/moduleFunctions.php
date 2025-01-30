@@ -64,9 +64,9 @@ function getReportingPeriods() {
  */
 function getAssessmentScores() {
     return [
-        '0' => 'Does not meet the MINIMUM Standards',
-        '1' => 'Meets some of the MINIMUM Standards',
-        '2' => 'Meeting the MINIMUM Standards'
+        '1' => 'Does not meet the MINIMUM Standards',
+        '2' => 'Meets some of the MINIMUM Standards',
+        '3' => 'Meeting the MINIMUM Standards'
     ];
 }
 

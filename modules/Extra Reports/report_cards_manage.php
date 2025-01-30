@@ -3,6 +3,7 @@ use Gibbon\Forms\Form;
 use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\ExtraReports\ReportCardGenerator;
+use Gibbon\Domain\School\SchoolYearTermGateway;
 
 // Module includes
 include __DIR__ . '/moduleFunctions.php';
@@ -20,10 +21,19 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
 
     $form->addHiddenValue('address', $session->get('address'));
 
+    // Get available terms for the current school year
+    $termGateway = $container->get(SchoolYearTermGateway::class);
+    $terms = $termGateway->selectTermsBySchoolYear((int) $session->get('gibbonSchoolYearID'))->fetchAll();
+    
+    $termOptions = array_reduce($terms, function($group, $item) {
+        $group[$item['gibbonSchoolYearTermID']] = $item['name'];
+        return $group;
+    }, []);
+
     $row = $form->addRow();
-        $row->addLabel('reportingPeriod', __('Reporting Period'));
+        $row->addLabel('reportingPeriod', __('Term'));
         $row->addSelect('reportingPeriod')
-            ->fromArray(['T1' => 'Term 1', 'T2' => 'Term 2', 'T3' => 'Term 3'])
+            ->fromArray($termOptions)
             ->required();
 
     // Get list of students with their form groups
@@ -68,16 +78,16 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     $criteria = array();
     $criteria['gibbonSchoolYearID'] = $session->get('gibbonSchoolYearID');
 
-    $sql = "SELECT assessment.reportingPeriod, gibbonPerson.gibbonPersonID, gibbonPerson.surname, 
-            gibbonPerson.preferredName, gibbonFormGroup.name as formGroup, COUNT(assessment.assessmentID) as assessmentCount
+    $sql = "SELECT assessment.gibbonSchoolYearTermID, gibbonPerson.gibbonPersonID, gibbonPerson.surname, 
+            gibbonPerson.preferredName, gibbonFormGroup.name as formGroup, COUNT(assessment.extraReportAssessmentID) as assessmentCount
             FROM extraReportAssessment as assessment
-            JOIN gibbonPerson ON (assessment.gibbonPersonID=gibbonPerson.gibbonPersonID)
+            JOIN gibbonPerson ON (assessment.gibbonPersonIDStudent=gibbonPerson.gibbonPersonID)
             JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
             JOIN gibbonFormGroup ON (gibbonFormGroup.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
             WHERE gibbonPerson.status='Full'
             AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
-            GROUP BY assessment.gibbonPersonID, assessment.reportingPeriod, gibbonFormGroup.name
-            ORDER BY assessment.reportingPeriod, gibbonFormGroup.name, gibbonPerson.surname, gibbonPerson.preferredName";
+            GROUP BY assessment.gibbonPersonIDStudent, assessment.gibbonSchoolYearTermID, gibbonFormGroup.name
+            ORDER BY assessment.gibbonSchoolYearTermID, gibbonFormGroup.name, gibbonPerson.surname, gibbonPerson.preferredName";
 
     $result = $pdo->select($sql, $criteria);
 
@@ -85,7 +95,11 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     $table = DataTable::create('reportCards');
     $table->setTitle(__('Recent Report Cards'));
 
-    $table->addColumn('reportingPeriod', __('Term'));
+    $table->addColumn('gibbonSchoolYearTermID', __('Term'))
+        ->format(function($row) use ($termGateway) {
+            $termData = $termGateway->getByID($row['gibbonSchoolYearTermID']);
+            return $termData['name'] ?? $row['gibbonSchoolYearTermID'];
+        });
     $table->addColumn('formGroup', __('Form Group'));
     $table->addColumn('student', __('Student'))
         ->format(function($row) {
