@@ -57,7 +57,7 @@ $sections = [
 // Development Chart Sections
 $developmentSections = [
     'mental' => [
-        'title' => 'Mental',
+        'title' => 'Mental (chart)',
         'subsections' => [
             'eye_testing' => 'E.Y.E Testing',
             'focus' => 'Focus',
@@ -68,14 +68,14 @@ $developmentSections = [
         ]
     ],
     'emotional' => [
-        'title' => 'Emotional',
+        'title' => 'Emotional (chart)',
         'subsections' => [
             'eye_testing' => 'E.Y.E Testing',
             'focus' => 'Focus'
         ]
     ],
     'spiritual' => [
-        'title' => 'Spiritual',
+        'title' => 'Spiritual (chart)',
         'subsections' => [
             'indigenous_pedagogies' => 'Indigenous Pedagogies',
             'focus' => 'Focus',
@@ -84,7 +84,7 @@ $developmentSections = [
         ]
     ],
     'physical' => [
-        'title' => 'Physical',
+        'title' => 'Physical (chart)',
         'subsections' => [
             'eye_testing' => 'E.Y.E Testing',
             'focus' => 'Focus',

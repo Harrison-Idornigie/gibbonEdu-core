@@ -123,6 +123,24 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
             error_log("Extra Reports: Initialized section: $sectionKey with " . count($section['items']) . " items");
         }
         
+        // Initialize development sections if they exist
+        if (isset($developmentSections)) {
+            $assessmentData['development'] = [];
+            foreach ($developmentSections as $sectionKey => $section) {
+                if (isset($section['subsections'])) {
+                    $assessmentData['development'][$sectionKey] = [];
+                    foreach ($section['subsections'] as $subsectionKey => $subsectionName) {
+                        $assessmentData['development'][$sectionKey][$subsectionName] = [
+                            'score' => null,
+                            'comment' => ''
+                        ];
+                    }
+                    error_log("Extra Reports: Initialized development section: $sectionKey");
+                }
+            }
+        }
+        
+        // Process POST data
         foreach ($_POST as $key => $value) {
             if (strpos($key, 'assessment_') === 0) {
                 // Extract section and type from the field name
@@ -130,36 +148,48 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                 $type = array_pop($fieldParts); // Get type (score/comment)
                 $hash = array_pop($fieldParts); // Get hash
                 array_shift($fieldParts); // Remove 'assessment'
-                $section = implode('_', $fieldParts); // Rejoin remaining parts for section name
                 
-                error_log("Extra Reports: Processing field - Key: $key");
-                error_log(" - Section: $section");
-                error_log(" - Hash: $hash");
-                error_log(" - Type: $type");
-                
-                // Get the full item name and section from the hash
-                if (isset($itemMap[$hash])) {
-                    $mappedSection = $itemMap[$hash]['section'];
-                    $itemName = $itemMap[$hash]['name'];
+                // Check if this is a development field
+                if ($fieldParts[0] === 'development') {
+                    array_shift($fieldParts); // Remove 'development'
+                    $sectionKey = implode('_', $fieldParts); // Get section key
                     
-                    error_log("Extra Reports: Found mapping - Section: $mappedSection, Item: $itemName, Type: $type, Value: $value");
+                    error_log("Extra Reports: Processing development field - Section: $sectionKey, Hash: $hash, Type: $type");
                     
-                    // Store the value - for scores, use numeric value directly
-                    if ($type === 'score') {
-                        $score = is_numeric($value) && in_array((int)$value, [1, 2, 3]) ? (int)$value : null;
-                        $assessmentData[$mappedSection][$itemName][$type] = $score;
-                        error_log("Extra Reports: Stored score - Section: $mappedSection, Item: $itemName, Score: $score");
-                    } else {
-                        $assessmentData[$mappedSection][$itemName][$type] = $value;
-                        error_log("Extra Reports: Stored comment - Section: $mappedSection, Item: $itemName");
+                    // Find matching subsection by hash
+                    if (isset($developmentSections[$sectionKey]['subsections'])) {
+                        foreach ($developmentSections[$sectionKey]['subsections'] as $subsectionName) {
+                            if (md5($subsectionName) === $hash) {
+                                if ($type === 'score') {
+                                    $score = is_numeric($value) && in_array((int)$value, [1, 2, 3]) ? (int)$value : null;
+                                    $assessmentData['development'][$sectionKey][$subsectionName]['score'] = $score;
+                                } else {
+                                    $assessmentData['development'][$sectionKey][$subsectionName]['comment'] = $value;
+                                }
+                                error_log("Extra Reports: Stored development data - Section: $sectionKey, Subsection: $subsectionName, Type: $type, Value: " . ($type === 'score' ? $score : substr($value, 0, 20) . '...'));
+                                break;
+                            }
+                        }
                     }
                 } else {
-                    error_log("Extra Reports: WARNING - No mapping found for hash: $hash");
-                    error_log("Extra Reports: Available mappings: " . print_r($itemMap, true));
+                    // Handle regular sections
+                    $section = implode('_', $fieldParts);
+                    if (isset($itemMap[$hash])) {
+                        $mappedSection = $itemMap[$hash]['section'];
+                        $itemName = $itemMap[$hash]['name'];
+                        
+                        if ($type === 'score') {
+                            $score = is_numeric($value) && in_array((int)$value, [1, 2, 3]) ? (int)$value : null;
+                            $assessmentData[$mappedSection][$itemName]['score'] = $score;
+                        } else {
+                            $assessmentData[$mappedSection][$itemName]['comment'] = $value;
+                        }
+                        error_log("Extra Reports: Stored regular data - Section: $mappedSection, Item: $itemName, Type: $type, Value: " . ($type === 'score' ? $value : substr($value, 0, 20) . '...'));
+                    }
                 }
             }
         }
-
+        
         error_log("Extra Reports: Final assessment data structure: " . print_r($assessmentData, true));
 
         // Get teacher ID
