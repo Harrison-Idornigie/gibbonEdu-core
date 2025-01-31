@@ -4,9 +4,14 @@ use Gibbon\Forms\DatabaseFormFactory;
 use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Domain\School\SchoolYearTermGateway;
+use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Domain\System\Gate;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
+
+global $guid, $container, $page;
+$connection2 = $container->get('db')->getConnection();
 
 if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards_view.php') == false) {
     // Access denied
@@ -14,6 +19,13 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
 } else {
     // Proceed!
     $page->breadcrumbs->add(__('View Assessments'));
+
+    // Get action with highest precedence
+    $highestAction = getHighestGroupedAction($guid, '/modules/Extra Reports/report_cards_view.php', $connection2);
+    if (empty($highestAction)) {
+        $page->addError(__('You do not have access to this action.'));
+        return;
+    }
 
     // Get URL parameters
     $gibbonSchoolYearID = $session->get('gibbonSchoolYearID');
@@ -115,67 +127,40 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         ->format(function($row) {
             return ucfirst($row['template']);
         });
-        
-    $table->addColumn('assessmentData', __('Assessment Data'))
-        ->format(function($row) {
-            if (empty($row['assessmentData'])) return '';
-            
-            $jsonData = json_decode($row['assessmentData'], true);
-            if (!$jsonData) return '';
-            
-            // Get assessment scores for mapping numbers back to text
-            $scoreMap = getAssessmentScores();
-            
-            $output = '';
-            foreach ($jsonData as $section => $subsections) {
-                // Add section header
-                $output .= Format::tag(ucfirst($section), 'message') . '<br/>';
-                
-                foreach ($subsections as $subsection => $data) {
-                    if (isset($data['score'])) {
-                        // Map numeric score back to text
-                        $scoreText = $scoreMap[$data['score']] ?? '';
-                        
-                        // Determine score class based on numeric value
-                        $scoreClass = match($data['score']) {
-                            '1' => 'error',
-                            '2' => 'warning',
-                            '3' => 'success',
-                            default => 'message'
-                        };
-                        
-                        // Display subsection and score
-                        $output .= Format::small(
-                            ucfirst($subsection) . ': ' . Format::tag($scoreText, $scoreClass)
-                        );
-                        
-                        // Add comment if available
-                        if (!empty($data['comment'])) {
-                            $output .= '<br/>' . Format::small(
-                                'Comment: ' . $data['comment'], 
-                                'text-gray-600'
-                            );
-                        }
-                        $output .= '<br/>';
-                    }
-                }
-                $output .= '<br/>';
-            }
-            return $output;
-        });
-        
-    $table->addColumn('comment', __('Comment'));
-    
-    $table->addColumn('timestamp', __('Last Updated'))
-        ->format(Format::using('dateTime', 'timestamp'));
 
+    // Action column for view/edit/delete
     $table->addActionColumn()
+    ->addParam('gibbonPersonID')
+    ->addParam('gibbonSchoolYearTermID')
+    ->addParam('template')
+    ->format(function ($row, $actions) use ($guid, $connection2) {
+        $actions->addAction('view', __('View'))
+            ->setURL('/modules/Extra Reports/report_cards_view_details.php')
+            ->setIcon('page_white_text');
+
+        if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards_enter.php')) {
+            $actions->addAction('edit', __('Edit'))
+                ->setURL('/modules/Extra Reports/report_cards_enter_student.php')
+                ->setIcon('config');
+
+            $actions->addAction('delete', __('Delete'))
+                ->setURL('/modules/Extra Reports/report_cards_delete.php')
+                ->setIcon('garbage');
+        }
+    });
+
+    echo $table->render($result->toDataSet());
+}
+?>
+
+
+<!-- $table->addActionColumn()
         ->addParam('gibbonPersonID')
         ->addParam('gibbonSchoolYearTermID')
         ->addParam('template')
-        ->format(function ($row, $actions) use ($session) {
+        ->format(function ($row, $actions) use ($guid, $connection2) {
             $actions->addAction('view', __('View'))
-                ->setURL('/modules/Extra Reports/report_cards_enter_student.php')
+                ->setURL('/modules/Extra Reports/report_cards_view_details.php')
                 ->setIcon('page_white_text');
 
             if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards_enter.php')) {
@@ -185,13 +170,6 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
 
                 $actions->addAction('delete', __('Delete'))
                     ->setURL('/modules/Extra Reports/report_cards_delete.php')
-                    ->setIcon('garbage')
-                    ->setClass('text-red-600')
-                    ->modalWindow()
-                    ->addParam('extraReportAssessmentID', $row['extraReportAssessmentID']);
+                    ->setIcon('garbage');
             }
-        });
-
-    echo $table->render($result->toDataSet());
-}
-?>
+        }); -->

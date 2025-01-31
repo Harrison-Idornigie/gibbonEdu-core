@@ -104,6 +104,33 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     $termData = $termGateway->getByID($gibbonSchoolYearTermID);
     $termName = $termData['name'] ?? $gibbonSchoolYearTermID;
 
+    // Fetch existing assessment data if it exists
+    try {
+        $data = [
+            'gibbonPersonID' => $gibbonPersonID,
+            'gibbonSchoolYearTermID' => $gibbonSchoolYearTermID,
+            'template' => $template
+        ];
+        
+        $sql = "SELECT assessmentData 
+                FROM extraReportAssessment 
+                WHERE gibbonPersonIDStudent=:gibbonPersonID 
+                AND gibbonSchoolYearTermID=:gibbonSchoolYearTermID 
+                AND template=:template";
+                
+        $result = $connection2->prepare($sql);
+        $result->execute($data);
+        
+        // Decode the JSON assessment data
+        $existingData = [];
+        if ($result && $result->rowCount() > 0) {
+            $row = $result->fetch();
+            $existingData = json_decode($row['assessmentData'], true) ?? [];
+        }
+    } catch (Exception $e) {
+        $page->addError(__('Could not load existing assessment data: ') . $e->getMessage());
+    }
+
     // Display student information header
     $row = $form->addRow();
     $row->addHeading(Format::name('', $student['preferredName'], $student['surname'], 'Student').' ('.$student['formGroup'].')');
@@ -112,71 +139,77 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
     $row = $form->addRow();
     $row->addHeading(__('Term').': '.$termName);
 
-    // Regular Assessment Sections
-    $row = $form->addRow();
-    $row->addHeading(__('Regular Assessment'))->addClass('mt-4');
-    
-    // Process regular assessment sections
+    // Regular Assessments Section
+    $form->addRow()->addHeading(__('Regular Assessments'))->addClass('text-2xl font-bold mt-8 mb-4');
+
     foreach ($sections as $sectionKey => $section) {
-        error_log("Extra Reports: Generating form section: $sectionKey");
-        
         // Add section heading with toggle
         $row = $form->addRow();
         $row->addHeading($section['title'])
             ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
             ->addClass('toggleDetails')
             ->addClass('font-bold');
-        
+
         // Process items
-        if (isset($section['items'])) {
-            foreach ($section['items'] as $item) {
-                // Generate unique hash for the item
-                $itemHash = md5($item);
+        foreach ($section['items'] as $item) {
+            $hash = md5($item);
+            
+            // Score field
+            $scoreField = "assessment_{$sectionKey}_{$hash}_score";
+            $row = $form->addRow()->addClass('toggleDetailsContent');
+            $row->addLabel($scoreField, $item)
+                ->description(__('Select the appropriate level'));
+            $row->addSelect($scoreField)
+                ->fromArray([
+                    '3' => 'Meeting the MINIMUM Standards',
+                    '2' => 'Meets some of the MINIMUM Standards',
+                    '1' => 'Does not meet the MINIMUM Standards'
+                ])
+                ->required()
+                ->placeholder('Please select...')
+                ->selected($existingData[$sectionKey][$item]['score'] ?? '');
                 
-                // Create score field
-                $scoreField = "assessment_{$sectionKey}_{$itemHash}_score";
-                $row = $form->addRow()->addClass('toggleDetailsContent');
-                $row->addLabel($scoreField, $item);
-                $row->addSelect($scoreField)
-                    ->fromArray([
-                        '3' => 'Meeting the MINIMUM Standards',
-                        '2' => 'Meets some of the MINIMUM Standards',
-                        '1' => 'Does not meet the MINIMUM Standards'
-                    ])
-                    ->required()
-                    ->placeholder('Please select...');
-                
-                // Create comment field
-                $commentField = "assessment_{$sectionKey}_{$itemHash}_comment";
-                $row = $form->addRow()->addClass('toggleDetailsContent');
-                $row->addLabel($commentField, __('Comment'));
-                $row->addTextArea($commentField)->setRows(3);
-            }
+            // Comment field
+            $commentField = "assessment_{$sectionKey}_{$hash}_comment";
+            $row = $form->addRow()->addClass('toggleDetailsContent');
+            $row->addLabel($commentField, __('Comment'));
+            $row->addTextArea($commentField)
+                ->setRows(3)
+                ->setValue($existingData[$sectionKey][$item]['comment'] ?? '');
         }
     }
 
-    // Development Chart Section
+    // Development Chart Section with clear separation
     if (isset($developmentSections)) {
+        // Add visual separator
+        $form->addRow()->addContent('<hr class="border-t-4 border-gray-300 my-8">');
+        
+        // Development Chart Header
         $row = $form->addRow();
-        $row->addHeading(__('Development Chart'))->addClass('mt-4');
+        $row->addHeading(__('Development Chart Assessment'))
+            ->addClass('text-2xl font-bold mb-4')
+            ->append('<p class="text-gray-600 text-sm mt-2">' . __('These assessments will appear in the circular growth chart') . '</p>');
         
         foreach ($developmentSections as $sectionKey => $section) {
+            // Clean section key for display but keep (chart) for data
+            $displayKey = str_replace(' (chart)', '', $sectionKey);
+            
             // Add section heading with toggle
             $row = $form->addRow();
-            $row->addHeading($section['title'])
+            $row->addHeading($section['title'] . ' Development')
                 ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
                 ->addClass('toggleDetails')
-                ->addClass('font-bold');
+                ->addClass('font-bold')
+                ->addClass('bg-blue-50 p-2 rounded');
             
             // Process subsections
             if (isset($section['subsections'])) {
                 foreach ($section['subsections'] as $subsectionKey => $subsectionName) {
-                    // Create unique hash for subsection
                     $hash = md5($subsectionName);
                     
-                    // Create score field with development_ prefix
+                    // Score field with development_ prefix and (chart) in section key
                     $scoreField = "assessment_development_{$sectionKey}_{$hash}_score";
-                    $row = $form->addRow()->addClass('toggleDetailsContent');
+                    $row = $form->addRow()->addClass('toggleDetailsContent')->addClass('ml-4');
                     $row->addLabel($scoreField, $subsectionName)
                         ->description(__('Select the appropriate level'));
                     $row->addSelect($scoreField)
@@ -186,20 +219,23 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                             '1' => 'Does not meet the MINIMUM Standards'
                         ])
                         ->required()
-                        ->placeholder('Please select...');
+                        ->placeholder('Please select...')
+                        ->selected($existingData['development'][$sectionKey][$subsectionName]['score'] ?? '');
                         
-                    // Create comment field with development_ prefix
+                    // Comment field with development_ prefix and (chart) in section key
                     $commentField = "assessment_development_{$sectionKey}_{$hash}_comment";
-                    $row = $form->addRow()->addClass('toggleDetailsContent');
+                    $row = $form->addRow()->addClass('toggleDetailsContent')->addClass('ml-4');
                     $row->addLabel($commentField, __('Comment'));
-                    $row->addTextArea($commentField)->setRows(3);
+                    $row->addTextArea($commentField)
+                        ->setRows(3)
+                        ->setValue($existingData['development'][$sectionKey][$subsectionName]['comment'] ?? '');
                 }
             }
         }
     }
 
-    // Add save button
-    $row = $form->addRow();
+    // Add save button with margin
+    $row = $form->addRow()->addClass('mt-8');
     $row->addSubmit('Save Assessment');
 
     // Output debugging information

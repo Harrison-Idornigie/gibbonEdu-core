@@ -56,40 +56,40 @@ $sections = [
 
 // Development Chart Sections
 $developmentSections = [
-    'mental' => [
-        'title' => 'Mental (chart)',
+    'mental (chart)' => [
+        'title' => 'Mental',
         'subsections' => [
-            'eye_testing' => 'E.Y.E Testing',
-            'focus' => 'Focus',
-            'gross_motor' => 'Gross Motor',
-            'fine_motor' => 'Fine Motor',
-            'dramatic_play' => 'Dramatic Play',
-            'read_alouds' => 'Read Alouds'
+            'E.Y.E Testing' => 'E.Y.E Testing',
+            'Focus' => 'Focus',
+            'Gross Motor' => 'Gross Motor',
+            'Fine Motor' => 'Fine Motor',
+            'Dramatic Play' => 'Dramatic Play',
+            'Read Alouds' => 'Read Alouds'
         ]
     ],
-    'emotional' => [
-        'title' => 'Emotional (chart)',
+    'emotional (chart)' => [
+        'title' => 'Emotional',
         'subsections' => [
-            'eye_testing' => 'E.Y.E Testing',
-            'focus' => 'Focus'
+            'E.Y.E Testing' => 'E.Y.E Testing',
+            'Focus' => 'Focus'
         ]
     ],
-    'spiritual' => [
-        'title' => 'Spiritual (chart)',
+    'spiritual (chart)' => [
+        'title' => 'Spiritual',
         'subsections' => [
-            'indigenous_pedagogies' => 'Indigenous Pedagogies',
-            'focus' => 'Focus',
-            'wits' => 'WITS',
-            'values' => 'Values'
+            'Indigenous Pedagogies' => 'Indigenous Pedagogies',
+            'Focus' => 'Focus',
+            'WITS' => 'WITS',
+            'Values' => 'Values'
         ]
     ],
-    'physical' => [
-        'title' => 'Physical (chart)',
+    'physical (chart)' => [
+        'title' => 'Physical',
         'subsections' => [
-            'eye_testing' => 'E.Y.E Testing',
-            'focus' => 'Focus',
-            'gross_motor' => 'Gross Motor',
-            'fine_motor' => 'Fine Motor'
+            'E.Y.E Testing' => 'E.Y.E Testing',
+            'Focus' => 'Focus',
+            'Gross Motor' => 'Gross Motor',
+            'Fine Motor' => 'Fine Motor'
         ]
     ]
 ];

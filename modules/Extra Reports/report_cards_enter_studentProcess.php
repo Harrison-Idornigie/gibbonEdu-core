@@ -83,114 +83,99 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
             }
         }
 
-        // Collect all assessment data from the form
-        $assessmentData = [];
-        
-        // Debug log ALL POST data in detail
-        error_log("Extra Reports: === START POST DATA DUMP ===");
-        foreach ($_POST as $key => $value) {
-            error_log("Extra Reports: POST field - Key: '$key', Value: '$value'");
-            if (strpos($key, 'assessment_') === 0) {
-                // Extract section and type from the field name
-                $fieldParts = explode('_', $key);
-                $lastPart = array_pop($fieldParts); // Get type (score/comment)
-                $hash = array_pop($fieldParts); // Get hash
-                array_shift($fieldParts); // Remove 'assessment'
-                $section = implode('_', $fieldParts); // Rejoin remaining parts for section name
-                
-                error_log("Extra Reports: - Section: '{$section}'");
-                error_log("Extra Reports: - Hash: '{$hash}'");
-                error_log("Extra Reports: - Type: '{$lastPart}'");
-                
-                if (isset($itemMap[$hash])) {
-                    error_log("Extra Reports: - Maps to: Section='{$itemMap[$hash]['section']}', Item='{$itemMap[$hash]['name']}'");
-                } else {
-                    error_log("Extra Reports: - NO MAPPING FOUND FOR HASH");
-                }
-            }
-        }
-        error_log("Extra Reports: === END POST DATA DUMP ===");
-        
-        // Initialize all sections from template with their items
-        foreach ($sections as $sectionKey => $section) {
-            $assessmentData[$sectionKey] = [];
-            foreach ($section['items'] as $item) {
-                $assessmentData[$sectionKey][$item] = [
-                    'score' => null,
-                    'comment' => ''
-                ];
-            }
-            error_log("Extra Reports: Initialized section: $sectionKey with " . count($section['items']) . " items");
-        }
-        
-        // Initialize development sections if they exist
-        if (isset($developmentSections)) {
-            $assessmentData['development'] = [];
-            foreach ($developmentSections as $sectionKey => $section) {
-                if (isset($section['subsections'])) {
-                    $assessmentData['development'][$sectionKey] = [];
-                    foreach ($section['subsections'] as $subsectionKey => $subsectionName) {
-                        $assessmentData['development'][$sectionKey][$subsectionName] = [
-                            'score' => null,
-                            'comment' => ''
-                        ];
-                    }
-                    error_log("Extra Reports: Initialized development section: $sectionKey");
-                }
-            }
-        }
-        
+        // Initialize data structures
+        $regularData = [];
+        $developmentData = [];
+        $jsonData = [];
+
         // Process POST data
         foreach ($_POST as $key => $value) {
             if (strpos($key, 'assessment_') === 0) {
-                // Extract section and type from the field name
+                // Extract field parts
                 $fieldParts = explode('_', $key);
-                $type = array_pop($fieldParts); // Get type (score/comment)
-                $hash = array_pop($fieldParts); // Get hash
-                array_shift($fieldParts); // Remove 'assessment'
-                
-                // Check if this is a development field
+                $type = array_pop($fieldParts);      // Get type (score/comment)
+                $hash = array_pop($fieldParts);      // Get hash
+                array_shift($fieldParts);            // Remove 'assessment'
+
+                // Check if this is a development chart field
+                $isDevelopment = false;
                 if ($fieldParts[0] === 'development') {
-                    array_shift($fieldParts); // Remove 'development'
-                    $sectionKey = implode('_', $fieldParts); // Get section key
-                    
-                    error_log("Extra Reports: Processing development field - Section: $sectionKey, Hash: $hash, Type: $type");
-                    
-                    // Find matching subsection by hash
-                    if (isset($developmentSections[$sectionKey]['subsections'])) {
-                        foreach ($developmentSections[$sectionKey]['subsections'] as $subsectionName) {
-                            if (md5($subsectionName) === $hash) {
-                                if ($type === 'score') {
-                                    $score = is_numeric($value) && in_array((int)$value, [1, 2, 3]) ? (int)$value : null;
-                                    $assessmentData['development'][$sectionKey][$subsectionName]['score'] = $score;
-                                } else {
-                                    $assessmentData['development'][$sectionKey][$subsectionName]['comment'] = $value;
+                    $isDevelopment = true;
+                    array_shift($fieldParts);        // Remove 'development'
+                }
+
+                // Reconstruct section name
+                $section = implode('_', $fieldParts);
+                
+                // Handle various (chart) suffix formats for backward compatibility
+                if ($isDevelopment) {
+                    // First remove any existing variations
+                    $section = str_replace(['_chart', '_(chart)', '_( chart)', ' (chart)', ' ( chart)'], '', $section);
+                    // Then add the standardized format
+                    $section .= ' (chart)';
+                }
+
+                // Debug logging
+                error_log("Extra Reports: Processing field - Key: $key, Section: $section, Type: $type, Hash: $hash, IsDevelopment: " . ($isDevelopment ? 'true' : 'false'));
+
+                // Find the original item name from the hash
+                $itemName = '';
+                if ($isDevelopment) {
+                    foreach ($developmentSections as $devSection => $details) {
+                        if (isset($details['subsections'])) {
+                            foreach ($details['subsections'] as $subName) {
+                                if (md5($subName) === $hash) {
+                                    $itemName = $subName;
+                                    break 2;
                                 }
-                                error_log("Extra Reports: Stored development data - Section: $sectionKey, Subsection: $subsectionName, Type: $type, Value: " . ($type === 'score' ? $score : substr($value, 0, 20) . '...'));
-                                break;
                             }
                         }
                     }
                 } else {
-                    // Handle regular sections
-                    $section = implode('_', $fieldParts);
-                    if (isset($itemMap[$hash])) {
-                        $mappedSection = $itemMap[$hash]['section'];
-                        $itemName = $itemMap[$hash]['name'];
-                        
-                        if ($type === 'score') {
-                            $score = is_numeric($value) && in_array((int)$value, [1, 2, 3]) ? (int)$value : null;
-                            $assessmentData[$mappedSection][$itemName]['score'] = $score;
-                        } else {
-                            $assessmentData[$mappedSection][$itemName]['comment'] = $value;
+                    foreach ($sections as $secKey => $secDetails) {
+                        if (isset($secDetails['items'])) {
+                            foreach ($secDetails['items'] as $item) {
+                                if (md5($item) === $hash) {
+                                    $itemName = $item;
+                                    break 2;
+                                }
+                            }
                         }
-                        error_log("Extra Reports: Stored regular data - Section: $mappedSection, Item: $itemName, Type: $type, Value: " . ($type === 'score' ? $value : substr($value, 0, 20) . '...'));
+                    }
+                }
+
+                if (!empty($itemName)) {
+                    if ($isDevelopment) {
+                        // Store in development data structure
+                        if (!isset($developmentData[$section])) {
+                            $developmentData[$section] = [];
+                        }
+                        if (!isset($developmentData[$section][$itemName])) {
+                            $developmentData[$section][$itemName] = [];
+                        }
+                        $developmentData[$section][$itemName][$type] = $value;
+                    } else {
+                        // Store in regular data structure
+                        if (!isset($regularData[$section])) {
+                            $regularData[$section] = [];
+                        }
+                        if (!isset($regularData[$section][$itemName])) {
+                            $regularData[$section][$itemName] = [];
+                        }
+                        $regularData[$section][$itemName][$type] = $value;
                     }
                 }
             }
         }
-        
-        error_log("Extra Reports: Final assessment data structure: " . print_r($assessmentData, true));
+
+        // Combine data into final JSON structure
+        $jsonData = $regularData;
+        if (!empty($developmentData)) {
+            $jsonData['development'] = $developmentData;
+        }
+
+        // Debug log the final JSON structure
+        error_log("Extra Reports: Final JSON structure: " . json_encode($jsonData, JSON_PRETTY_PRINT));
 
         // Get teacher ID
         $gibbonPersonIDTeacher = $session->get('gibbonPersonID');
@@ -212,7 +197,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         if ($result->rowCount() > 0) {
             // Update existing assessment
             $updateData = [
-                'assessmentData' => json_encode($assessmentData),
+                'assessmentData' => json_encode($jsonData),
                 'comment' => $_POST['comment'] ?? '',
                 'gibbonPersonIDTeacher' => $gibbonPersonIDTeacher,
                 'extraReportAssessmentID' => $result->fetch()['extraReportAssessmentID']
@@ -232,7 +217,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                 'gibbonPersonIDStudent' => $gibbonPersonID,
                 'gibbonSchoolYearTermID' => $gibbonSchoolYearTermID,
                 'template' => $template,
-                'assessmentData' => json_encode($assessmentData),
+                'assessmentData' => json_encode($jsonData),
                 'comment' => $_POST['comment'] ?? '',
                 'gibbonPersonIDTeacher' => $gibbonPersonIDTeacher
             ];
