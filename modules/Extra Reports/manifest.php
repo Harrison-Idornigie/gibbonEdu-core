@@ -54,9 +54,21 @@ $moduleTables = [
         `description` TEXT NULL,
         `sections` TEXT NOT NULL,
         `chartSections` TEXT NOT NULL,
+        `content` TEXT NOT NULL,
+        `active` ENUM('Y','N') NOT NULL DEFAULT 'Y',
         `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (`templateID`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8;"
+];
+
+// Module hooks
+$moduleHooks = [
+    'Student Profile' => [
+        'name' => 'Development Chart',
+        'sourceModuleName' => 'Extra Reports',
+        'sourceModuleAction' => 'View Report Cards_mine',
+        'sourceModuleInclude' => 'hook_studentProfile_developmentChart.php'
+    ]
 ];
 
 // Gibbonisation
@@ -117,6 +129,25 @@ $actionRows = [
         'menuShow' => 'Y',
         'defaultPermissionAdmin' => 'Y',
         'defaultPermissionTeacher' => 'Y',
+        'defaultPermissionStudent' => 'N',
+        'defaultPermissionParent' => 'N',
+        'defaultPermissionSupport' => 'N',
+        'categoryPermissionStaff' => 'Y',
+        'categoryPermissionStudent' => 'N',
+        'categoryPermissionParent' => 'N',
+        'categoryPermissionOther' => 'N'
+    ],
+    [
+        'name' => 'Manage Templates',
+        'precedence' => '0',
+        'category' => 'Admin',
+        'description' => 'Manage report card templates',
+        'URLList' => 'report_templates_manage.php,report_templates_manage_edit.php,report_templates_manage_editProcess.php,report_templates_manage_delete.php,report_templates_manage_deleteProcess.php,report_templates_manage_add.php,report_templates_manage_addProcess.php',
+        'entryURL' => 'report_templates_manage.php',
+        'entrySidebar' => 'Y',
+        'menuShow' => 'Y',
+        'defaultPermissionAdmin' => 'Y',
+        'defaultPermissionTeacher' => 'N',
         'defaultPermissionStudent' => 'N',
         'defaultPermissionParent' => 'N',
         'defaultPermissionSupport' => 'N',
