@@ -19,92 +19,125 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+use Gibbon\Forms\Form;
+use Gibbon\Forms\DatabaseFormFactory;
 use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Data\Validator;
 
 require_once '../../gibbon.php';
+
+$_POST = $container->get(Validator::class)->sanitize($_POST);
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
 
-$URL = $session->get('absoluteURL').'/index.php?q=/modules/Extra Reports/report_templates_manage.php';
+// Set URL
+$URL = $session->get('absoluteURL') . '/index.php?q=/modules/Extra Reports/report_templates_manage_add.php';
 
 if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templates_manage_add.php') == false) {
     // Access denied
-    $URL .= '&return=error0';
-    header("Location: {$URL}");
+    header("Location: " . $session->get('absoluteURL') . "/index.php?q=/modules/Extra Reports/report_templates_manage.php&return=error0");
     exit;
 } else {
     // Proceed!
     $name = $_POST['name'] ?? '';
     $description = $_POST['description'] ?? '';
-    $active = $_POST['active'] ?? 'N';
-    $content = $_POST['content'] ?? '';
-    $importFile = $_POST['importFile'] ?? '';
+    $sectionsJson = $_POST['sections'] ?? '[]';
+    $chartSectionsJson = $_POST['chartSections'] ?? '[]';
 
     // Validate required fields
     if (empty($name)) {
-        $URL .= '&return=error1';
-        header("Location: {$URL}");
+        header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage_add.php&return=error1");
         exit;
     }
 
-    // Validate template name (alphanumeric, underscores and spaces only)
-    if (!preg_match('/^[a-zA-Z0-9_ ]+$/', $name)) {
-        $URL .= '&return=error1';
-        header("Location: {$URL}");
-        exit;
-    }
-
+    // Check name uniqueness
     try {
-        // Handle file import if selected
-        if (!empty($importFile)) {
-            $templatesDir = __DIR__ . '/templates/reportCards/';
-            $filePath = $templatesDir . $importFile;
-            if (file_exists($filePath)) {
-                $content = file_get_contents($filePath);
-            }
+        $data = array('name' => $name);
+        $sql = "SELECT COUNT(*) FROM extraReportTemplate WHERE name=:name";
+        $result = $connection2->prepare($sql);
+        $result->execute($data);
+        if ($result->fetchColumn() > 0) {
+            header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage_add.php&return=error7");
+            exit;
         }
+    } catch (PDOException $e) {
+        header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage_add.php&return=error2");
+        exit;
+    }
 
-        // Ensure we have content either from form or file
-        if (empty($content)) {
-            $URL .= '&return=error1';
-            header("Location: {$URL}");
+    // Process sections
+    try {
+        $sections = json_decode($sectionsJson, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage_add.php&return=error1");
             exit;
         }
 
+        // Validate section types
+        $validTypes = ['spiritual', 'emotional', 'physical', 'mental'];
+        
+        // Keep sections in their original format since it matches the template
+        $templateSections = [];
+        foreach ($sections as $type => $section) {
+            if (!in_array($type, $validTypes)) continue;
+            if (empty($section['title'])) continue;
+            
+            $templateSections[$type] = [
+                'title' => trim($section['title']),
+                'items' => array_values(array_filter($section['items'] ?? [], function($item) {
+                    return !empty($item);
+                }))
+            ];
+        }
+
+        // Process chart sections
+        $chartSections = json_decode($chartSectionsJson, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage_add.php&return=error1");
+            exit;
+        }
+
+        // Keep chart sections in their original format
+        $templateChartSections = [];
+        foreach ($chartSections as $type => $section) {
+            if (!preg_match('/(mental|emotional|spiritual|physical) \(chart\)/', $type)) continue;
+            if (empty($section['title'])) continue;
+
+            $templateChartSections[$type] = [
+                'title' => trim($section['title']),
+                'subsections' => array_filter($section['subsections'] ?? [], function($item) {
+                    return !empty($item);
+                })
+            ];
+        }
+
+        // Insert into database
         $data = array(
             'name' => $name,
             'description' => $description,
-            'active' => $active,
-            'content' => $content,
-            'sections' => '[]',
-            'chartSections' => '[]'
+            'sections' => json_encode($templateSections),
+            'chartSections' => json_encode($templateChartSections),
+            'active' => 'Y',
+            'timestamp' => date('Y-m-d H:i:s')
         );
-        
-        // Check if name already exists
-        $checkData = array('name' => $name);
-        $sql = "SELECT COUNT(*) FROM extraReportTemplate WHERE name=:name";
-        $result = $connection2->prepare($sql);
-        $result->execute($checkData);
-        
-        if ($result->fetchColumn() > 0) {
-            $URL .= '&return=error7';
-            header("Location: {$URL}");
-            exit;
-        }
 
-        // Insert new template
-        $sql = "INSERT INTO extraReportTemplate SET name=:name, description=:description, active=:active, content=:content, sections=:sections, chartSections=:chartSections";
+        $sql = "INSERT INTO extraReportTemplate 
+                (name, description, sections, chartSections, active, timestamp) 
+                VALUES 
+                (:name, :description, :sections, :chartSections, :active, :timestamp)";
+        
         $result = $connection2->prepare($sql);
         $result->execute($data);
 
         // Success
-        $URL .= '&return=success0';
-        header("Location: {$URL}");
+        header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage.php&return=success0");
         exit;
     } catch (PDOException $e) {
-        $URL .= '&return=error2';
-        header("Location: {$URL}");
+        header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage_add.php&return=error2");
+        exit;
+    } catch (Exception $e) {
+        header("Location: {$session->get('absoluteURL')}/index.php?q=/modules/Extra Reports/report_templates_manage_add.php&return=error1");
         exit;
     }
 }

@@ -2,8 +2,8 @@
 /*
 Gibbon: the flexible, open school platform
 Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
-Copyright © 2010, Gibbon Foundation
-Gibbon™, Gibbon Education Ltd. (Hong Kong)
+Copyright 2010, Gibbon Foundation
+Gibbon, Gibbon Education Ltd. (Hong Kong)
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,9 +30,9 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
     $page->addError(__('You do not have access to this action.'));
 } else {
     // Proceed!
-    $template = $_GET['template'] ?? '';
+    $templateID = $_GET['template'] ?? '';
     
-    if (empty($template)) {
+    if (empty($templateID)) {
         $page->addError(__('No template selected.'));
         return;
     }
@@ -41,127 +41,263 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
         ->add(__('Manage Report Templates'), 'report_templates_manage.php')
         ->add(__('Edit Template'));
 
-    // Get template content
-    $templateFile = __DIR__ . '/templates/reportCards/' . basename($template);
-    if (!file_exists($templateFile)) {
-        $page->addError(__('The specified template cannot be found.'));
-        return;
-    }
-
-    $templateContent = file_get_contents($templateFile);
-
-    // Create form
-    $form = Form::create('templateEdit', $session->get('absoluteURL').'/modules/Extra Reports/report_templates_manage_editProcess.php');
-    $form->setFactory(DatabaseFormFactory::create($pdo));
-
-    $form->addHiddenValue('address', $session->get('address'));
-    $form->addHiddenValue('template', $template);
-
-    // Template name
-    $row = $form->addRow();
-    $row->addLabel('name', __('Name'));
-    $row->addTextField('name')
-        ->setValue(basename($template, '.php'))
-        ->required();
-
-    // Visual editor tabs
-    $row = $form->addRow();
-    $col = $row->addColumn()->addClass('flex flex-col h-screen');
-    
-    // Add tabs for different sections
-    $col->addContent('<div class="flex border-b border-gray-300">
-        <button class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border-b-2 border-blue-500" onclick="switchTab(\'layout\')" id="tab-layout">'.__('Layout').'</button>
-        <button class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700" onclick="switchTab(\'sections\')" id="tab-sections">'.__('Sections').'</button>
-        <button class="px-4 py-2 text-sm font-medium text-gray-500 hover:text-gray-700" onclick="switchTab(\'code\')" id="tab-code">'.__('Code').'</button>
-    </div>');
-
-    // Layout tab (visual editor)
-    $col->addContent('<div id="content-layout" class="flex-1 p-4">
-        <div class="grid grid-cols-12 gap-4 h-full">
-            <!-- Preview area -->
-            <div class="col-span-8 bg-white border rounded-lg shadow-sm p-4">
-                <div id="template-preview" class="w-full h-full"></div>
-            </div>
-            
-            <!-- Properties panel -->
-            <div class="col-span-4 bg-white border rounded-lg shadow-sm p-4">
-                <h3 class="font-bold mb-4">'.__('Properties').'</h3>
-                <div id="template-properties"></div>
-            </div>
-        </div>
-    </div>');
-
-    // Sections tab
-    $col->addContent('<div id="content-sections" class="flex-1 p-4 hidden">
-        <div class="grid grid-cols-12 gap-4 h-full">
-            <!-- Available sections -->
-            <div class="col-span-4 bg-white border rounded-lg shadow-sm p-4">
-                <h3 class="font-bold mb-4">'.__('Available Sections').'</h3>
-                <div id="available-sections" class="space-y-2">
-                    <div class="p-2 bg-gray-100 rounded cursor-move" draggable="true">Header</div>
-                    <div class="p-2 bg-gray-100 rounded cursor-move" draggable="true">Development Chart</div>
-                    <div class="p-2 bg-gray-100 rounded cursor-move" draggable="true">Comments</div>
-                </div>
-            </div>
-            
-            <!-- Template structure -->
-            <div class="col-span-8 bg-white border rounded-lg shadow-sm p-4">
-                <h3 class="font-bold mb-4">'.__('Template Structure').'</h3>
-                <div id="template-structure" class="min-h-[200px] border-2 border-dashed border-gray-300 p-4">
-                    <!-- Sections will be dropped here -->
-                </div>
-            </div>
-        </div>
-    </div>');
-
-    // Code tab
-    $col->addContent('<div id="content-code" class="flex-1 p-4 hidden">
-        <textarea id="template-code" name="content" class="w-full h-full font-mono text-sm p-4 border rounded-lg">'
-        .htmlspecialchars($templateContent).
-        '</textarea>
-    </div>');
-
-    // Add JavaScript for tab switching and drag-drop
-    $page->scripts->add('inline', "
-        function switchTab(tab) {
-            // Hide all content
-            document.querySelectorAll('[id^=content-]').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('[id^=tab-]').forEach(el => {
-                el.classList.remove('border-b-2', 'border-blue-500', 'text-gray-700');
-                el.classList.add('text-gray-500');
-            });
-            
-            // Show selected tab
-            document.getElementById('content-' + tab).classList.remove('hidden');
-            document.getElementById('tab-' + tab).classList.add('border-b-2', 'border-blue-500', 'text-gray-700');
+    // Get template from database
+    try {
+        $data = ['templateID' => $templateID];
+        $sql = "SELECT name, description, sections, chartSections, active FROM extraReportTemplate WHERE templateID=:templateID";
+        $result = $connection2->prepare($sql);
+        $result->execute($data);
+        
+        if ($result->rowCount() != 1) {
+            $page->addError(__('Template not found.'));
+            return;
         }
 
-        // Initialize drag and drop
-        document.querySelectorAll('#available-sections [draggable=true]').forEach(el => {
-            el.addEventListener('dragstart', e => {
-                e.dataTransfer.setData('text/plain', e.target.textContent);
-            });
-        });
+        $template = $result->fetch();
 
-        const dropZone = document.getElementById('template-structure');
-        dropZone.addEventListener('dragover', e => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-        });
+        // Decode JSON data
+        $sections = json_decode($template['sections'], true) ?? [];
+        $chartSections = json_decode($template['chartSections'], true) ?? [];
 
-        dropZone.addEventListener('drop', e => {
-            e.preventDefault();
-            const data = e.dataTransfer.getData('text/plain');
-            const div = document.createElement('div');
-            div.className = 'p-2 bg-gray-100 rounded mb-2 flex justify-between items-center';
-            div.innerHTML = data + '<button onclick=\"this.parentElement.remove()\" class=\"text-red-500 hover:text-red-700\">×</button>';
-            dropZone.appendChild(div);
-        });
-    ");
+        // Ensure all required sections exist with default structure
+        $defaultSections = [
+            'spiritual' => ['title' => 'Spiritual', 'items' => []],
+            'emotional' => ['title' => 'Social Emotional', 'items' => []],
+            'physical' => ['title' => 'Physical', 'items' => []],
+            'mental' => ['title' => 'Mental', 'items' => []]
+        ];
 
-    $row = $form->addRow();
-    $row->addFooter();
+        $defaultChartSections = [
+            'spiritual (chart)' => ['title' => 'Spiritual Development', 'subsections' => []],
+            'emotional (chart)' => ['title' => 'Social Emotional Development', 'subsections' => []],
+            'physical (chart)' => ['title' => 'Physical Development', 'subsections' => []],
+            'mental (chart)' => ['title' => 'Mental Development', 'subsections' => []]
+        ];
+
+        // Convert section names if needed (for backward compatibility)
+        if (isset($sections['social_emotional'])) {
+            $sections['emotional'] = $sections['social_emotional'];
+            unset($sections['social_emotional']);
+        }
+        if (isset($chartSections['social_emotional (chart)'])) {
+            $chartSections['emotional (chart)'] = $chartSections['social_emotional (chart)'];
+            unset($chartSections['social_emotional (chart)']);
+        }
+
+        // Merge with defaults to ensure all sections exist
+        $sections = array_replace_recursive($defaultSections, $sections);
+        $chartSections = array_replace_recursive($defaultChartSections, $chartSections);
+
+        // Add window.templateData for Alpine.js
+        $page->scripts->add('templateData', "window.templateData = ".json_encode([
+            'sections' => $sections,
+            'chartSections' => $chartSections
+        ]).";");
+
+        // Form
+        $form = Form::create('templateEdit', $session->get('absoluteURL').'/modules/Extra Reports/report_templates_manage_editProcess.php');
+        $form->addHiddenValue('address', $session->get('address'));
+        $form->addHiddenValue('templateID', $templateID);
+
+        $row = $form->addRow();
+        $row->addLabel('name', __('Name'))
+            ->description(__('Must be unique.'))
+            ->required();
+        $row->addTextField('name')
+            ->required()
+            ->maxLength(50)
+            ->setValue($template['name']);
+
+        $row = $form->addRow();
+        $row->addLabel('description', __('Description'));
+        $row->addTextArea('description')
+            ->setRows(3)
+            ->setValue($template['description']);
+
+        $row = $form->addRow();
+        $row->addLabel('active', __('Active'));
+        $row->addYesNo('active')
+            ->required()
+            ->selected($template['active']);
+
+        // Add template editor with Alpine.js
+        $col = $form->addRow()->addColumn();
+        $col->addContent('
+    <div x-data="templateEditor(window.templateData)" x-init="$nextTick(() => init())" class="w-full">
+        <!-- Hidden fields for form submission -->
+        <input type="hidden" name="sections" :value="JSON.stringify(sections)">
+        <input type="hidden" name="chartSections" :value="JSON.stringify(chartSections)">
+        
+        <!-- Assessment Sections -->
+        <div class="mt-4">
+            <h3 class="text-lg font-bold mb-2">'.__('General Assessment Sections').'</h3>
+            <p class="text-gray-600 mb-4">'.__('Add "I can..." statements to assess developmental areas.').'</p>
+            
+            <!-- 2x2 Grid Layout for Standard Sections -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                <!-- Spiritual Section -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="font-bold">Spiritual</h4>
+                        <button @click="addItem(\'spiritual\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Item</button>
+                    </div>
+                    <template x-for="(item, index) in sections.spiritual.items" :key="index">
+                        <div class="flex items-center mb-2">
+                            <input type="text" x-model="sections.spiritual.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can participate in Land Based activities">
+                            <button @click="removeItem(\'spiritual\', index)" class="text-red-500">
+                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Social Emotional Section -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="font-bold">Social Emotional</h4>
+                        <button @click="addItem(\'emotional\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Item</button>
+                    </div>
+                    <template x-for="(item, index) in sections.emotional.items" :key="index">
+                        <div class="flex items-center mb-2">
+                            <input type="text" x-model="sections.emotional.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can solve problems">
+                            <button @click="removeItem(\'emotional\', index)" class="text-red-500">
+                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Physical Section -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="font-bold">Physical</h4>
+                        <button @click="addItem(\'physical\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Item</button>
+                    </div>
+                    <template x-for="(item, index) in sections.physical.items" :key="index">
+                        <div class="flex items-center mb-2">
+                            <input type="text" x-model="sections.physical.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can use writing tools">
+                            <button @click="removeItem(\'physical\', index)" class="text-red-500">
+                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Mental Section -->
+                <div class="bg-white rounded-lg shadow p-4">
+                    <div class="flex justify-between items-center mb-4">
+                        <h4 class="font-bold">Mental</h4>
+                        <button @click="addItem(\'mental\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Item</button>
+                    </div>
+                    <template x-for="(item, index) in sections.mental.items" :key="index">
+                        <div class="flex items-center mb-2">
+                            <input type="text" x-model="sections.mental.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can recognize some letters">
+                            <button @click="removeItem(\'mental\', index)" class="text-red-500">
+                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Development Chart Sections -->
+            <div class="mt-8">
+                <h3 class="text-lg font-bold mb-2">'.__('Development Chart Sections').'</h3>
+                <p class="text-gray-600 mb-4">'.__('Add focus areas for each development category (e.g. "Self-Awareness", "Problem Solving", "Motor Skills").').'</p>
+                
+                <!-- 2x2 Grid Layout for Chart Sections -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Spiritual Development -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold">Spiritual Development</h4>
+                            <button @click="addSubsection(\'spiritual (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
+                        </div>
+                        <template x-for="(value, key) in Object.entries(chartSections[\'spiritual (chart)\'].subsections)" :key="key">
+                            <div class="flex items-center mb-2">
+                                <input type="text" x-model="chartSections[\'spiritual (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Indigenous Pedagogies">
+                                <button @click="removeSubsection(\'spiritual (chart)\', value[0])" class="text-red-500">
+                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Social Emotional Development -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold">Social Emotional Development</h4>
+                            <button @click="addSubsection(\'emotional (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
+                        </div>
+                        <template x-for="(value, key) in Object.entries(chartSections[\'emotional (chart)\'].subsections)" :key="key">
+                            <div class="flex items-center mb-2">
+                                <input type="text" x-model="chartSections[\'emotional (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Self-Awareness">
+                                <button @click="removeSubsection(\'emotional (chart)\', value[0])" class="text-red-500">
+                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Physical Development -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold">Physical Development</h4>
+                            <button @click="addSubsection(\'physical (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
+                        </div>
+                        <template x-for="(value, key) in Object.entries(chartSections[\'physical (chart)\'].subsections)" :key="key">
+                            <div class="flex items-center mb-2">
+                                <input type="text" x-model="chartSections[\'physical (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Gross Motor">
+                                <button @click="removeSubsection(\'physical (chart)\', value[0])" class="text-red-500">
+                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Mental Development -->
+                    <div class="bg-white rounded-lg shadow p-4">
+                        <div class="flex justify-between items-center mb-4">
+                            <h4 class="font-bold">Mental Development</h4>
+                            <button @click="addSubsection(\'mental (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
+                        </div>
+                        <template x-for="(value, key) in Object.entries(chartSections[\'mental (chart)\'].subsections)" :key="key">
+                            <div class="flex items-center mb-2">
+                                <input type="text" x-model="chartSections[\'mental (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Focus">
+                                <button @click="removeSubsection(\'mental (chart)\', value[0])" class="text-red-500">
+                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    ');
+
+    // Add a fixed submit button row
+    $row = $form->addRow()->addClass('sticky bottom-0 bg-white border-t border-gray-300 py-4 px-6 mt-4');
     $row->addSubmit();
 
     echo $form->getOutput();
+} catch (PDOException $e) {
+    $page->addError(__('Could not load template.'));
+}
 }

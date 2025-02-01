@@ -36,6 +36,73 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
     $page->breadcrumbs
         ->add(__('Manage Report Templates'));
 
+    // Get list of file-based templates
+    $templatesDir = __DIR__ . '/templates/reportCards/';
+    $templateFiles = glob($templatesDir . '*.php');
+    $fileTemplates = [];
+    foreach ($templateFiles as $file) {
+        $fileTemplates[basename($file)] = basename($file, '.php');
+    }
+
+    // Show import dialog if no templates exist
+    try {
+        $data = array();
+        $sql = "SELECT COUNT(*) FROM extraReportTemplate";
+        $result = $connection2->prepare($sql);
+        $result->execute($data);
+        $templateCount = $result->fetchColumn();
+
+        if ($templateCount == 0 && !empty($fileTemplates)) {
+            // Show import dialog
+            $form = Form::create('importDialog', $_SESSION[$guid]['absoluteURL'].'/modules/Extra Reports/report_templates_manage_importProcess.php');
+            $form->setFactory(DatabaseFormFactory::create($pdo));
+            
+            $form->addHiddenValue('address', $session->get('address'));
+            
+            $row = $form->addRow();
+            $row->addHeading(__('Import Templates'))
+                ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
+                ->addClass('toggleDetails')
+                ->addClass('font-bold');
+
+            $row = $form->addRow();
+            $row->addContent(__('No templates found in the database. Import existing templates to get started.'))
+                ->wrap('<div class="message warning mb-4">', '</div>');
+
+            $row = $form->addRow();
+            $col = $row->addColumn()->addClass('flex flex-col space-y-2');
+            $col->addLabel('templates', __('Select Templates'))
+                ->description(__('Choose one or more templates to import'))
+                ->addClass('mb-2');
+
+            foreach ($fileTemplates as $file => $name) {
+                $col->addCheckbox('templates[]')
+                    ->setValue($file)
+                    ->setLabel($name)
+                    ->addClass('w-full');
+            }
+
+            $row = $form->addRow();
+            $row->addSubmit(__('Import'));
+            
+            echo $form->getOutput();
+        }
+    } catch (PDOException $e) {
+        echo "<div class='error'>".$e->getMessage().'</div>';
+    }
+
+    // Get first template for preloading
+    $firstTemplate = null;
+    try {
+        $data = array();
+        $sql = "SELECT templateID, name, description, sections, chartSections FROM extraReportTemplate ORDER BY name LIMIT 1";
+        $result = $connection2->prepare($sql);
+        $result->execute($data);
+        $firstTemplate = $result->fetch();
+    } catch (PDOException $e) {
+        // Handle error silently - template preload is optional
+    }
+
     // Handle HTMX requests
     $isHtmx = isset($_SERVER['HTTP_HX_REQUEST']) && $_SERVER['HTTP_HX_REQUEST'] === 'true';
     
@@ -54,9 +121,17 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
     $table = DataTable::create('templates');
     $table->setTitle(__('Report Templates'));
 
+    // Add header actions
+    $table->addHeaderAction('import', __('Import File Template'))
+        ->setURL('./modules/Extra Reports/report_templates_manage_importProcess.php')
+        ->setIcon('upload')
+        ->addClass('bg-blue-600 text-white')
+        ->displayLabel();
+
     $table->addHeaderAction('add', __('Add Template'))
-        ->setURL($session->get('absoluteURL').'/modules/Extra Reports/report_templates_manage_add.php')
-        ->addParam('hx-boost', 'true')
+        ->setURL('./index.php')
+        ->addParam('q', '/modules/Extra Reports/report_templates_manage_add.php')
+        ->addParam('preload', $firstTemplate['templateID'] ?? '')
         ->displayLabel();
 
     $table->addColumn('name', __('Name'));
@@ -78,34 +153,30 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
 
     $table->addActionColumn()
         ->addParam('template')
-        ->addParam('hx-boost', 'true')
-        ->format(function($values, $actions) use ($session) {
+        ->format(function($values, $actions) {
             $actions->addAction('edit', __('Edit'))
-                ->setURL($session->get('absoluteURL').'/modules/Extra Reports/report_templates_manage_edit.php')
+                ->setURL('./index.php')
+                ->addParam('q', '/modules/Extra Reports/report_templates_manage_edit.php')
                 ->addParam('template', $values['templateID']);
 
+            $actions->addAction('duplicate', __('Duplicate'))
+                ->setURL('./index.php')
+                ->addParam('q', '/modules/Extra Reports/report_templates_manage_add.php')
+                ->addParam('preload', $values['templateID']);
+
             $actions->addAction('delete', __('Delete'))
-                ->setURL($session->get('absoluteURL').'/modules/Extra Reports/report_templates_manage_delete.php')
-                ->addParam('template', $values['templateID']);
+                ->setURL('./index.php')
+                ->addParam('q', '/modules/Extra Reports/report_templates_manage_delete.php')
+                ->addParam('template', $values['templateID'])
+                ->setIcon('garbage')
+                ->addParam('hx-confirm', __('Are you sure you want to delete this template?'));
         });
 
     // Add migration notice if file-based templates exist
-    $templatesDir = __DIR__ . '/templates/reportCards/';
-    if (!is_dir($templatesDir)) {
-        // Create templates directory if it doesn't exist
-        mkdir($templatesDir, 0755, true);
-    }
-    $templateFiles = glob($templatesDir . '*.php');
-    if (!empty($templateFiles)) {
+    if (!empty($fileTemplates)) {
         $page->addWarning(__('Legacy file-based templates were found. Please use the Add Template button to migrate them to the database.'));
     }
 
     // Render table
-    if ($isHtmx) {
-        // For HTMX requests, only return the table content
-        echo $table->getOutput();
-    } else {
-        // For full page loads, render the entire page
-        echo $table->render($templates);
-    }
+    echo $table->render($templates);
 }
