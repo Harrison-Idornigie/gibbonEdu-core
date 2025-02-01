@@ -3,150 +3,66 @@
  * Manages the dynamic form for editing report template sections
  */
 document.addEventListener('alpine:init', () => {
-    Alpine.data('templateEditor', (data) => ({
+    Alpine.data('templateEditor', () => ({
         sections: {},
         chartSections: {},
-        errors: [],
 
         init() {
-            // Initialize sections with default structure
-            const defaultSections = {
-                'spiritual': {
-                    title: 'Spiritual',
-                    items: []
-                },
-                'emotional': {
-                    title: 'Social Emotional',
-                    items: []
-                },
-                'physical': {
-                    title: 'Physical',
-                    items: []
-                },
-                'mental': {
-                    title: 'Mental',
-                    items: []
-                }
-            };
-
-            // Initialize chart sections with default structure
-            const defaultChartSections = {
-                'spiritual (chart)': {
-                    title: 'Spiritual Development',
-                    subsections: {}
-                },
-                'emotional (chart)': {
-                    title: 'Social Emotional Development',
-                    subsections: {}
-                },
-                'physical (chart)': {
-                    title: 'Physical Development',
-                    subsections: {}
-                },
-                'mental (chart)': {
-                    title: 'Mental Development',
-                    subsections: {}
-                }
-            };
-
-            // Initialize with data or defaults
-            if (data?.sections) {
-                // Handle legacy data structure
-                if (Array.isArray(data.sections)) {
-                    const convertedSections = {};
-                    data.sections.forEach(section => {
-                        const type = section.type === 'social_emotional' ? 'emotional' : section.type;
-                        if (type) {
-                            convertedSections[type] = {
-                                title: section.title || defaultSections[type].title,
-                                items: Array.isArray(section.items) ? section.items : Object.values(section.items || {})
-                            };
-                        }
-                    });
-                    this.sections = { ...defaultSections, ...convertedSections };
+            // Initialize with template data if it exists
+            if (window.templateData) {
+                console.log('Initializing with template data:', window.templateData);
+                if (window.templateData.sections) {
+                    this.sections = window.templateData.sections;
                 } else {
-                    // Handle object structure
-                    const convertedSections = {};
-                    Object.entries(data.sections).forEach(([type, section]) => {
-                        const newType = type === 'social_emotional' ? 'emotional' : type;
-                        convertedSections[newType] = {
-                            title: section.title || defaultSections[newType]?.title,
-                            items: Array.isArray(section.items) ? section.items : []
-                        };
-                    });
-                    this.sections = { ...defaultSections, ...convertedSections };
+                    this.sections = {
+                        spiritual: { title: 'Spiritual', items: [] },
+                        emotional: { title: 'Social Emotional', items: [] },
+                        physical: { title: 'Physical', items: [] },
+                        mental: { title: 'Mental', items: [] }
+                    };
                 }
-            } else {
-                this.sections = defaultSections;
-            }
 
-            // Initialize chart sections
-            if (data?.chartSections) {
-                // Handle legacy data structure
-                if (Array.isArray(data.chartSections)) {
-                    const convertedChartSections = {};
-                    data.chartSections.forEach(section => {
-                        const type = section.type === 'social_emotional' ? 'emotional' : section.type;
-                        if (type) {
-                            const subsections = {};
-                            if (section.subsections) {
-                                if (Array.isArray(section.subsections)) {
-                                    section.subsections.forEach(sub => {
-                                        if (typeof sub === 'string') {
-                                            subsections[sub] = sub;
-                                        } else if (sub.name) {
-                                            subsections[sub.name] = sub.name;
-                                        }
-                                    });
-                                } else {
-                                    Object.entries(section.subsections).forEach(([key, value]) => {
-                                        subsections[key] = value;
-                                    });
-                                }
-                            }
-                            convertedChartSections[`${type} (chart)`] = {
-                                title: section.title || defaultChartSections[`${type} (chart)`].title,
-                                subsections: subsections
-                            };
-                        }
-                    });
-                    this.chartSections = { ...defaultChartSections, ...convertedChartSections };
+                if (window.templateData.chartSections) {
+                    this.chartSections = window.templateData.chartSections;
                 } else {
-                    // Handle object structure
-                    const convertedChartSections = {};
-                    Object.entries(data.chartSections).forEach(([type, section]) => {
-                        const newType = type.replace('social_emotional', 'emotional');
-                        convertedChartSections[newType] = {
-                            title: section.title || defaultChartSections[newType]?.title,
-                            subsections: section.subsections || {}
-                        };
-                    });
-                    this.chartSections = { ...defaultChartSections, ...convertedChartSections };
+                    this.chartSections = {
+                        'spiritual (chart)': { title: 'Spiritual Development', subsections: {} },
+                        'emotional (chart)': { title: 'Social Emotional Development', subsections: {} },
+                        'physical (chart)': { title: 'Physical Development', subsections: {} },
+                        'mental (chart)': { title: 'Mental Development', subsections: {} }
+                    };
                 }
-            } else {
-                this.chartSections = defaultChartSections;
             }
+            console.log('Initialized with:', { sections: this.sections, chartSections: this.chartSections });
         },
 
         // Item Management for Assessment Sections
         addItem(sectionType) {
+            console.log('Adding item to:', sectionType);
             if (!this.sections[sectionType]) {
                 this.sections[sectionType] = { 
                     title: sectionType === 'emotional' ? 'Social Emotional' : sectionType.charAt(0).toUpperCase() + sectionType.slice(1),
                     items: []
                 };
             }
+            if (!Array.isArray(this.sections[sectionType].items)) {
+                this.sections[sectionType].items = [];
+            }
             this.sections[sectionType].items.push('');
+            console.log('Updated sections:', this.sections);
         },
 
         removeItem(sectionType, index) {
+            console.log('Removing item:', { sectionType, index });
             if (this.sections[sectionType] && Array.isArray(this.sections[sectionType].items)) {
                 this.sections[sectionType].items.splice(index, 1);
+                console.log('Updated sections:', this.sections);
             }
         },
 
         // Subsection Management for Development Chart
         addSubsection(sectionType) {
+            console.log('Adding subsection to:', sectionType);
             if (!this.chartSections[sectionType]) {
                 this.chartSections[sectionType] = { 
                     title: sectionType === 'emotional (chart)' ? 'Social Emotional Development' : 
@@ -155,14 +71,20 @@ document.addEventListener('alpine:init', () => {
                     subsections: {}
                 };
             }
+            if (!this.chartSections[sectionType].subsections) {
+                this.chartSections[sectionType].subsections = {};
+            }
             const timestamp = Date.now().toString();
             this.chartSections[sectionType].subsections[timestamp] = '';
+            console.log('Updated chartSections:', this.chartSections);
         },
 
         removeSubsection(sectionType, key) {
+            console.log('Removing subsection:', { sectionType, key });
             if (this.chartSections[sectionType]?.subsections) {
                 const { [key]: removed, ...rest } = this.chartSections[sectionType].subsections;
                 this.chartSections[sectionType].subsections = rest;
+                console.log('Updated chartSections:', this.chartSections);
             }
         },
 
@@ -173,52 +95,58 @@ document.addEventListener('alpine:init', () => {
             Object.entries(this.sections).forEach(([type, section]) => {
                 const serverType = type === 'emotional' ? 'social_emotional' : type;
                 convertedSections[serverType] = {
-                    type: serverType,
                     title: section.title,
-                    items: section.items.filter(item => item.trim() !== '')
+                    items: (section.items || []).filter(item => item.trim() !== '')
                 };
             });
 
             // Convert chart sections to server format
             const convertedChartSections = {};
             Object.entries(this.chartSections).forEach(([type, section]) => {
-                const serverType = type.replace(' (chart)', '');
-                const finalType = serverType === 'emotional' ? 'social_emotional' : serverType;
-                convertedChartSections[finalType] = {
-                    type: finalType,
+                const baseType = type.replace(' (chart)', '');
+                const serverType = baseType === 'emotional' ? 'social_emotional' : baseType;
+                const chartType = `${serverType} (chart)`;
+                convertedChartSections[chartType] = {
                     title: section.title,
-                    subsections: Object.entries(section.subsections).reduce((acc, [key, value]) => {
-                        acc[key] = value;
-                        return acc;
-                    }, {})
+                    subsections: Object.fromEntries(
+                        Object.entries(section.subsections || {})
+                            .filter(([_, value]) => value.trim() !== '')
+                            .map(([key, value]) => [value, value]) // Use the value as both key and value
+                    )
                 };
             });
 
-            return {
+            const formData = {
                 sections: convertedSections,
                 chartSections: convertedChartSections
             };
+            console.log('Form data:', formData);
+            return formData;
         },
 
         // Validation
         validate() {
-            this.errors = [];
-            
-            // Validate sections
-            Object.entries(this.sections).forEach(([type, section]) => {
-                if (!section.title) {
-                    this.errors.push(`Section ${type} must have a title`);
+            // Ensure all required sections exist
+            const requiredSections = ['spiritual', 'emotional', 'physical', 'mental'];
+            const requiredChartSections = requiredSections.map(s => s + ' (chart)');
+
+            let valid = true;
+
+            requiredSections.forEach(section => {
+                if (!this.sections[section] || !Array.isArray(this.sections[section].items)) {
+                    console.error(`Missing or invalid section: ${section}`);
+                    valid = false;
                 }
             });
 
-            // Validate chart sections
-            Object.entries(this.chartSections).forEach(([type, section]) => {
-                if (!section.title) {
-                    this.errors.push(`Chart section ${type} must have a title`);
+            requiredChartSections.forEach(section => {
+                if (!this.chartSections[section] || typeof this.chartSections[section].subsections !== 'object') {
+                    console.error(`Missing or invalid chart section: ${section}`);
+                    valid = false;
                 }
             });
 
-            return this.errors.length === 0;
+            return valid;
         }
     }));
 });

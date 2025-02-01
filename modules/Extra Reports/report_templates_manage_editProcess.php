@@ -71,21 +71,10 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
             exit;
         }
 
-        // Validate section types
-        $validTypes = ['spiritual', 'emotional', 'physical', 'mental'];
-        
-        // Keep sections in their original format since it matches the template
-        $templateSections = [];
-        foreach ($sections as $type => $section) {
-            if (!in_array($type, $validTypes)) continue;
-            if (empty($section['title'])) continue;
-            
-            $templateSections[$type] = [
-                'title' => trim($section['title']),
-                'items' => array_values(array_filter($section['items'] ?? [], function($item) {
-                    return !empty($item);
-                }))
-            ];
+        // Convert emotional to social_emotional for database storage
+        if (isset($sections['emotional'])) {
+            $sections['social_emotional'] = $sections['emotional'];
+            unset($sections['emotional']);
         }
 
         // Process chart sections
@@ -95,47 +84,44 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
             exit;
         }
 
-        // Keep chart sections in their original format
-        $templateChartSections = [];
-        foreach ($chartSections as $type => $section) {
-            if (!preg_match('/(mental|emotional|spiritual|physical) \(chart\)/', $type)) continue;
-            if (empty($section['title'])) continue;
-
-            $templateChartSections[$type] = [
-                'title' => trim($section['title']),
-                'subsections' => array_filter($section['subsections'] ?? [], function($item) {
-                    return !empty($item);
-                })
-            ];
+        // Convert emotional to social_emotional for chart sections
+        if (isset($chartSections['emotional (chart)'])) {
+            $chartSections['social_emotional (chart)'] = $chartSections['emotional (chart)'];
+            unset($chartSections['emotional (chart)']);
         }
 
         // Update database
-        $data = [
-            'templateID' => $templateID,
-            'name' => $name,
-            'description' => $description,
-            'sections' => json_encode($templateSections),
-            'chartSections' => json_encode($templateChartSections),
-            'active' => $active,
-            'timestamp' => date('Y-m-d H:i:s')
-        ];
+        try {
+            $data = [
+                'templateID' => $templateID,
+                'name' => $name,
+                'description' => $description,
+                'active' => $active,
+                'sections' => json_encode($sections),
+                'chartSections' => json_encode($chartSections),
+                'timestamp' => date('Y-m-d H:i:s')
+            ];
 
-        $sql = "UPDATE extraReportTemplate 
-                SET name=:name, description=:description, sections=:sections, 
-                    chartSections=:chartSections, active=:active, timestamp=:timestamp 
-                WHERE templateID=:templateID";
-        
-        $result = $connection2->prepare($sql);
-        $result->execute($data);
+            $sql = "UPDATE extraReportTemplate SET 
+                    name=:name, 
+                    description=:description, 
+                    active=:active, 
+                    sections=:sections, 
+                    chartSections=:chartSections, 
+                    timestamp=:timestamp 
+                    WHERE templateID=:templateID";
+            
+            $result = $connection2->prepare($sql);
+            $result->execute($data);
 
-        // Success
-        header("Location: ".$session->get('absoluteURL')."/index.php?q=/modules/Extra Reports/report_templates_manage.php&return=success0");
-        exit;
-    } catch (PDOException $e) {
-        header("Location: {$URL}&return=error2");
-        exit;
+            header("Location: {$URL}&return=success0");
+            exit;
+        } catch (PDOException $e) {
+            header("Location: {$URL}&return=error2");
+            exit;
+        }
     } catch (Exception $e) {
-        header("Location: {$URL}&return=error1");
+        header("Location: {$URL}&return=error2");
         exit;
     }
 }

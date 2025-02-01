@@ -21,6 +21,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 use Gibbon\Forms\Form;
 use Gibbon\Forms\DatabaseFormFactory;
+use Gibbon\Database\Connection;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -55,9 +56,26 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
 
         $template = $result->fetch();
 
-        // Decode JSON data
-        $sections = json_decode($template['sections'], true) ?? [];
-        $chartSections = json_decode($template['chartSections'], true) ?? [];
+        // Decode JSON data with error checking
+        $sections = json_decode($template['sections'], true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $sections = [];
+        }
+        
+        $chartSections = json_decode($template['chartSections'], true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $chartSections = [];
+        }
+
+        // Convert social_emotional to emotional for frontend display
+        if (isset($sections['social_emotional'])) {
+            $sections['emotional'] = $sections['social_emotional'];
+            unset($sections['social_emotional']);
+        }
+        if (isset($chartSections['social_emotional (chart)'])) {
+            $chartSections['emotional (chart)'] = $chartSections['social_emotional (chart)'];
+            unset($chartSections['social_emotional (chart)']);
+        }
 
         // Ensure all required sections exist with default structure
         $defaultSections = [
@@ -74,28 +92,70 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
             'mental (chart)' => ['title' => 'Mental Development', 'subsections' => []]
         ];
 
-        // Convert section names if needed (for backward compatibility)
-        if (isset($sections['social_emotional'])) {
-            $sections['emotional'] = $sections['social_emotional'];
-            unset($sections['social_emotional']);
+        // Convert legacy array format to object format if needed
+        if (is_array($sections) && isset($sections[0])) {
+            $convertedSections = [];
+            foreach ($sections as $section) {
+                $type = $section['type'] === 'social_emotional' ? 'emotional' : $section['type'];
+                $convertedSections[$type] = [
+                    'title' => $section['title'],
+                    'items' => is_array($section['items']) ? $section['items'] : array_values((array)$section['items'])
+                ];
+            }
+            $sections = $convertedSections;
         }
-        if (isset($chartSections['social_emotional (chart)'])) {
-            $chartSections['emotional (chart)'] = $chartSections['social_emotional (chart)'];
-            unset($chartSections['social_emotional (chart)']);
+
+        if (is_array($chartSections) && isset($chartSections[0])) {
+            $convertedChartSections = [];
+            foreach ($chartSections as $section) {
+                $type = $section['type'] === 'social_emotional' ? 'emotional' : $section['type'];
+                $chartType = $type . ' (chart)';
+                $subsections = [];
+                if (!empty($section['subsections'])) {
+                    if (is_array($section['subsections'])) {
+                        foreach ($section['subsections'] as $sub) {
+                            if (is_string($sub)) {
+                                $subsections[$sub] = $sub;
+                            } elseif (isset($sub['name'])) {
+                                $subsections[$sub['name']] = $sub['name'];
+                            }
+                        }
+                    } else {
+                        $subsections = (array)$section['subsections'];
+                    }
+                }
+                $convertedChartSections[$chartType] = [
+                    'title' => $section['title'],
+                    'subsections' => $subsections
+                ];
+            }
+            $chartSections = $convertedChartSections;
         }
 
         // Merge with defaults to ensure all sections exist
         $sections = array_replace_recursive($defaultSections, $sections);
         $chartSections = array_replace_recursive($defaultChartSections, $chartSections);
 
-        // Add window.templateData for Alpine.js
-        $page->scripts->add('templateData', "window.templateData = ".json_encode([
-            'sections' => $sections,
-            'chartSections' => $chartSections
-        ]).";");
+        // Log sections and chart sections for debugging
+        error_log('Sections loaded: ' . print_r($sections, true));
+        error_log('Chart sections loaded: ' . print_r($chartSections, true));
+
+        // Add template editor script and data
+        $page->scripts->add('template-editor-js', 'modules/Extra Reports/js/template-editor.js');
+        $page->scripts->add('template-editor-data', '
+        <script>
+            window.templateData = ' . json_encode([
+                'sections' => $sections,
+                'chartSections' => $chartSections
+            ]) . ';
+        </script>', ['type' => 'inline']);
 
         // Form
         $form = Form::create('templateEdit', $session->get('absoluteURL').'/modules/Extra Reports/report_templates_manage_editProcess.php');
+        
+        // Create a Gibbon database connection wrapper
+        $db = new Connection($connection2);
+        $form->setFactory(DatabaseFormFactory::create($db));
         $form->addHiddenValue('address', $session->get('address'));
         $form->addHiddenValue('templateID', $templateID);
 
@@ -123,7 +183,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
         // Add template editor with Alpine.js
         $col = $form->addRow()->addColumn();
         $col->addContent('
-    <div x-data="templateEditor(window.templateData)" x-init="$nextTick(() => init())" class="w-full">
+    <div x-data="templateEditor(window.templateData)" x-init="init()" class="w-full">
         <!-- Hidden fields for form submission -->
         <input type="hidden" name="sections" :value="JSON.stringify(sections)">
         <input type="hidden" name="chartSections" :value="JSON.stringify(chartSections)">
@@ -143,12 +203,8 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.spiritual.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="sections.spiritual.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can participate in Land Based activities">
-                            <button @click="removeItem(\'spiritual\', index)" class="text-red-500">
-                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <input type="text" x-model="item" @input="sections.spiritual.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can participate in Land Based activities">
+                            <button @click="removeItem(\'spiritual\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
                 </div>
@@ -161,12 +217,8 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.emotional.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="sections.emotional.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can solve problems">
-                            <button @click="removeItem(\'emotional\', index)" class="text-red-500">
-                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <input type="text" x-model="item" @input="sections.emotional.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can solve problems">
+                            <button @click="removeItem(\'emotional\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
                 </div>
@@ -179,12 +231,8 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.physical.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="sections.physical.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can use writing tools">
-                            <button @click="removeItem(\'physical\', index)" class="text-red-500">
-                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <input type="text" x-model="item" @input="sections.physical.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can run and jump">
+                            <button @click="removeItem(\'physical\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
                 </div>
@@ -197,12 +245,8 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.mental.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="sections.mental.items[index]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can recognize some letters">
-                            <button @click="removeItem(\'mental\', index)" class="text-red-500">
-                                <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
+                            <input type="text" x-model="item" @input="sections.mental.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can count to 10">
+                            <button @click="removeItem(\'mental\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
                 </div>
@@ -221,14 +265,10 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                             <h4 class="font-bold">Spiritual Development</h4>
                             <button @click="addSubsection(\'spiritual (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
                         </div>
-                        <template x-for="(value, key) in Object.entries(chartSections[\'spiritual (chart)\'].subsections)" :key="key">
+                        <template x-for="(value, key) in chartSections[\'spiritual (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'spiritual (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Indigenous Pedagogies">
-                                <button @click="removeSubsection(\'spiritual (chart)\', value[0])" class="text-red-500">
-                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                                <input type="text" x-model="chartSections[\'spiritual (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Indigenous Pedagogies">
+                                <button @click="removeSubsection(\'spiritual (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>
                     </div>
@@ -239,14 +279,10 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                             <h4 class="font-bold">Social Emotional Development</h4>
                             <button @click="addSubsection(\'emotional (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
                         </div>
-                        <template x-for="(value, key) in Object.entries(chartSections[\'emotional (chart)\'].subsections)" :key="key">
+                        <template x-for="(value, key) in chartSections[\'emotional (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'emotional (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Self-Awareness">
-                                <button @click="removeSubsection(\'emotional (chart)\', value[0])" class="text-red-500">
-                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                                <input type="text" x-model="chartSections[\'emotional (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Self-Awareness">
+                                <button @click="removeSubsection(\'emotional (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>
                     </div>
@@ -257,14 +293,10 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                             <h4 class="font-bold">Physical Development</h4>
                             <button @click="addSubsection(\'physical (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
                         </div>
-                        <template x-for="(value, key) in Object.entries(chartSections[\'physical (chart)\'].subsections)" :key="key">
+                        <template x-for="(value, key) in chartSections[\'physical (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'physical (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Gross Motor">
-                                <button @click="removeSubsection(\'physical (chart)\', value[0])" class="text-red-500">
-                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                                <input type="text" x-model="chartSections[\'physical (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Motor Skills">
+                                <button @click="removeSubsection(\'physical (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>
                     </div>
@@ -275,14 +307,10 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                             <h4 class="font-bold">Mental Development</h4>
                             <button @click="addSubsection(\'mental (chart)\')" type="button" class="bg-green-500 text-white px-3 py-1 rounded text-sm">Add Area</button>
                         </div>
-                        <template x-for="(value, key) in Object.entries(chartSections[\'mental (chart)\'].subsections)" :key="key">
+                        <template x-for="(value, key) in chartSections[\'mental (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'mental (chart)\'].subsections[value[0]]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Focus">
-                                <button @click="removeSubsection(\'mental (chart)\', value[0])" class="text-red-500">
-                                    <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                                    </svg>
-                                </button>
+                                <input type="text" x-model="chartSections[\'mental (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Problem Solving">
+                                <button @click="removeSubsection(\'mental (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>
                     </div>
