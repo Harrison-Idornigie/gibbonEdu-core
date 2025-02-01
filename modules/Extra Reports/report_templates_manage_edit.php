@@ -67,14 +67,18 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
             $chartSections = [];
         }
 
-        // Convert social_emotional to emotional for frontend display
-        if (isset($sections['social_emotional'])) {
-            $sections['emotional'] = $sections['social_emotional'];
-            unset($sections['social_emotional']);
+        // Convert database keys to frontend format
+        $convertedSections = [];
+        foreach ($sections as $key => $section) {
+            $frontendKey = ($key == 'social_emotional') ? 'emotional' : $key;
+            $convertedSections[$frontendKey] = $section;
         }
-        if (isset($chartSections['social_emotional (chart)'])) {
-            $chartSections['emotional (chart)'] = $chartSections['social_emotional (chart)'];
-            unset($chartSections['social_emotional (chart)']);
+
+        $convertedChartSections = [];
+        foreach ($chartSections as $key => $chartSection) {
+            $baseKey = str_replace(' (chart)', '', $key);
+            $frontendKey = ($baseKey == 'social_emotional') ? 'emotional' : $baseKey;
+            $convertedChartSections["$frontendKey (chart)"] = $chartSection;
         }
 
         // Ensure all required sections exist with default structure
@@ -93,7 +97,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
         ];
 
         // Convert legacy array format to object format if needed
-        if (is_array($sections) && isset($sections[0])) {
+        if (is_array($convertedSections) && isset($convertedSections[0])) {
             $convertedSections = [];
             foreach ($sections as $section) {
                 $type = $section['type'] === 'social_emotional' ? 'emotional' : $section['type'];
@@ -102,10 +106,9 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     'items' => is_array($section['items']) ? $section['items'] : array_values((array)$section['items'])
                 ];
             }
-            $sections = $convertedSections;
         }
 
-        if (is_array($chartSections) && isset($chartSections[0])) {
+        if (is_array($convertedChartSections) && isset($convertedChartSections[0])) {
             $convertedChartSections = [];
             foreach ($chartSections as $section) {
                 $type = $section['type'] === 'social_emotional' ? 'emotional' : $section['type'];
@@ -129,33 +132,34 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     'subsections' => $subsections
                 ];
             }
-            $chartSections = $convertedChartSections;
         }
 
         // Merge with defaults to ensure all sections exist
-        $sections = array_replace_recursive($defaultSections, $sections);
-        $chartSections = array_replace_recursive($defaultChartSections, $chartSections);
+        $convertedSections = array_replace_recursive($defaultSections, $convertedSections);
+        $convertedChartSections = array_replace_recursive($defaultChartSections, $convertedChartSections);
 
         // Log sections and chart sections for debugging
-        error_log('Sections loaded: ' . print_r($sections, true));
-        error_log('Chart sections loaded: ' . print_r($chartSections, true));
+        error_log('Sections loaded: ' . print_r($convertedSections, true));
+        error_log('Chart sections loaded: ' . print_r($convertedChartSections, true));
 
         // Add template editor script and data
         $page->scripts->add('template-editor-js', 'modules/Extra Reports/js/template-editor.js');
-        $page->scripts->add('template-editor-data', '
-        <script>
-            window.templateData = ' . json_encode([
-                'sections' => $sections,
-                'chartSections' => $chartSections
-            ]) . ';
-        </script>', ['type' => 'inline']);
+        
+        // Pass converted data to frontend
+        echo "<script>
+            window.templateData = ".json_encode([
+                'sections' => $convertedSections,
+                'chartSections' => $convertedChartSections
+            ]).";
+        </script>";
+
+        // Create a Gibbon database connection wrapper and form factory
+        $db = new Connection($connection2);
+        $factory = DatabaseFormFactory::create($db);
 
         // Form
         $form = Form::create('templateEdit', $session->get('absoluteURL').'/modules/Extra Reports/report_templates_manage_editProcess.php');
-        
-        // Create a Gibbon database connection wrapper
-        $db = new Connection($connection2);
-        $form->setFactory(DatabaseFormFactory::create($db));
+        $form->setFactory($factory);
         $form->addHiddenValue('address', $session->get('address'));
         $form->addHiddenValue('templateID', $templateID);
 
@@ -183,7 +187,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
         // Add template editor with Alpine.js
         $col = $form->addRow()->addColumn();
         $col->addContent('
-    <div x-data="templateEditor(window.templateData)" x-init="init()" class="w-full">
+    <div x-data="templateEditor(window.templateData)" x-init="$nextTick(() => init())" class="w-full">
         <!-- Hidden fields for form submission -->
         <input type="hidden" name="sections" :value="JSON.stringify(sections)">
         <input type="hidden" name="chartSections" :value="JSON.stringify(chartSections)">
@@ -203,7 +207,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.spiritual.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="item" @input="sections.spiritual.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can participate in Land Based activities">
+                            <input type="text" :value="item" @input="sections.spiritual.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can participate in Land Based activities">
                             <button @click="removeItem(\'spiritual\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
@@ -217,7 +221,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.emotional.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="item" @input="sections.emotional.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can solve problems">
+                            <input type="text" :value="item" @input="sections.emotional.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can solve problems">
                             <button @click="removeItem(\'emotional\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
@@ -231,7 +235,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.physical.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="item" @input="sections.physical.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can run and jump">
+                            <input type="text" :value="item" @input="sections.physical.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can run and jump">
                             <button @click="removeItem(\'physical\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
@@ -245,7 +249,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                     </div>
                     <template x-for="(item, index) in sections.mental.items" :key="index">
                         <div class="flex items-center mb-2">
-                            <input type="text" x-model="item" @input="sections.mental.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can count to 10">
+                            <input type="text" :value="item" @input="sections.mental.items[index] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. I can count to 10">
                             <button @click="removeItem(\'mental\', index)" type="button" class="text-red-500 hover:text-red-700">×</button>
                         </div>
                     </template>
@@ -267,7 +271,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                         </div>
                         <template x-for="(value, key) in chartSections[\'spiritual (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'spiritual (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Indigenous Pedagogies">
+                                <input type="text" :value="value" @input="chartSections[\'spiritual (chart)\'].subsections[key] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Indigenous Pedagogies">
                                 <button @click="removeSubsection(\'spiritual (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>
@@ -281,7 +285,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                         </div>
                         <template x-for="(value, key) in chartSections[\'emotional (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'emotional (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Self-Awareness">
+                                <input type="text" :value="value" @input="chartSections[\'emotional (chart)\'].subsections[key] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Self-Awareness">
                                 <button @click="removeSubsection(\'emotional (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>
@@ -295,7 +299,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                         </div>
                         <template x-for="(value, key) in chartSections[\'physical (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'physical (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Motor Skills">
+                                <input type="text" :value="value" @input="chartSections[\'physical (chart)\'].subsections[key] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Motor Skills">
                                 <button @click="removeSubsection(\'physical (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>
@@ -309,7 +313,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                         </div>
                         <template x-for="(value, key) in chartSections[\'mental (chart)\'].subsections" :key="key">
                             <div class="flex items-center mb-2">
-                                <input type="text" x-model="chartSections[\'mental (chart)\'].subsections[key]" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Problem Solving">
+                                <input type="text" :value="value" @input="chartSections[\'mental (chart)\'].subsections[key] = $event.target.value" class="flex-1 border rounded px-2 py-1 mr-2" placeholder="e.g. Problem Solving">
                                 <button @click="removeSubsection(\'mental (chart)\', key)" type="button" class="text-red-500 hover:text-red-700">×</button>
                             </div>
                         </template>

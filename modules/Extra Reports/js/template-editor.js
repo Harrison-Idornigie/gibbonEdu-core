@@ -3,35 +3,42 @@
  * Manages the dynamic form for editing report template sections
  */
 document.addEventListener('alpine:init', () => {
-    Alpine.data('templateEditor', () => ({
+    Alpine.data('templateEditor', (initialData = null) => ({
         sections: {},
         chartSections: {},
 
         init() {
-            // Initialize with template data if it exists
-            if (window.templateData) {
-                console.log('Initializing with template data:', window.templateData);
-                if (window.templateData.sections) {
-                    this.sections = window.templateData.sections;
-                } else {
-                    this.sections = {
-                        spiritual: { title: 'Spiritual', items: [] },
-                        emotional: { title: 'Social Emotional', items: [] },
-                        physical: { title: 'Physical', items: [] },
-                        mental: { title: 'Mental', items: [] }
-                    };
-                }
-
-                if (window.templateData.chartSections) {
-                    this.chartSections = window.templateData.chartSections;
-                } else {
-                    this.chartSections = {
-                        'spiritual (chart)': { title: 'Spiritual Development', subsections: {} },
-                        'emotional (chart)': { title: 'Social Emotional Development', subsections: {} },
-                        'physical (chart)': { title: 'Physical Development', subsections: {} },
-                        'mental (chart)': { title: 'Mental Development', subsections: {} }
-                    };
-                }
+            console.log('Initializing with data:', initialData);
+            // Initialize with provided data or defaults
+            if (initialData) {
+                this.sections = initialData.sections || {
+                    spiritual: { title: 'Spiritual', items: [] },
+                    emotional: { title: 'Social Emotional', items: [] },
+                    physical: { title: 'Physical', items: [] },
+                    mental: { title: 'Mental', items: [] }
+                };
+                
+                this.chartSections = initialData.chartSections || {
+                    'spiritual (chart)': { title: 'Spiritual Development', subsections: {} },
+                    'emotional (chart)': { title: 'Social Emotional Development', subsections: {} },
+                    'physical (chart)': { title: 'Physical Development', subsections: {} },
+                    'mental (chart)': { title: 'Mental Development', subsections: {} }
+                };
+            } else {
+                // Set defaults if no data provided
+                this.sections = {
+                    spiritual: { title: 'Spiritual', items: [] },
+                    emotional: { title: 'Social Emotional', items: [] },
+                    physical: { title: 'Physical', items: [] },
+                    mental: { title: 'Mental', items: [] }
+                };
+                
+                this.chartSections = {
+                    'spiritual (chart)': { title: 'Spiritual Development', subsections: {} },
+                    'emotional (chart)': { title: 'Social Emotional Development', subsections: {} },
+                    'physical (chart)': { title: 'Physical Development', subsections: {} },
+                    'mental (chart)': { title: 'Mental Development', subsections: {} }
+                };
             }
             console.log('Initialized with:', { sections: this.sections, chartSections: this.chartSections });
         },
