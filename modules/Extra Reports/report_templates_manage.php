@@ -122,16 +122,17 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
     $table->setTitle(__('Report Templates'));
 
     // Add header actions
-    $table->addHeaderAction('import', __('Import File Template'))
-        ->setURL('./modules/Extra Reports/report_templates_manage_importProcess.php')
-        ->setIcon('upload')
-        ->addClass('bg-blue-600 text-white')
-        ->displayLabel();
+    // $table->addHeaderAction('import', __('Import File Template'))
+    //     ->setURL('./modules/Extra Reports/report_templates_manage_importProcess.php')
+    //     ->setIcon('upload')
+    //     ->addClass('bg-blue-600 text-white')
+    //     ->displayLabel();
 
     $table->addHeaderAction('add', __('Add Template'))
         ->setURL('./index.php')
         ->addParam('q', '/modules/Extra Reports/report_templates_manage_add.php')
-        ->addParam('preload', $firstTemplate['templateID'] ?? '')
+        ->setIcon('plus')
+        ->addClass('bg-blue-600 text-white')
         ->displayLabel();
 
     $table->addColumn('name', __('Name'));
@@ -172,10 +173,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
                 ->addParam('hx-confirm', __('Are you sure you want to delete this template?'));
         });
 
-    // Add migration notice if file-based templates exist
-    if (!empty($fileTemplates)) {
-        $page->addWarning(__('Legacy file-based templates were found. Please use the Add Template button to migrate them to the database.'));
-    }
+  
 
     // Render table
     echo $table->render($templates);

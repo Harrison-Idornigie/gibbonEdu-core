@@ -6,19 +6,34 @@ document.addEventListener('alpine:init', () => {
     Alpine.data('templateEditor', (initialData = null) => ({
         sections: {},
         chartSections: {},
+        dataReady: false,
 
         init() {
-            console.log('Initializing with data:', initialData);
-            // Initialize with provided data or defaults
-            if (initialData) {
-                this.sections = initialData.sections || {
+            // Listen for template data ready event
+            window.addEventListener('template-data-ready', () => {
+                console.log('Template data ready:', window.templateData);
+                this.initializeData(window.templateData);
+                this.dataReady = true;
+            });
+
+            // If data is already available, initialize immediately
+            if (window.templateData) {
+                console.log('Data already available:', window.templateData);
+                this.initializeData(window.templateData);
+                this.dataReady = true;
+            }
+        },
+
+        initializeData(data) {
+            if (data) {
+                this.sections = data.sections || {
                     spiritual: { title: 'Spiritual', items: [] },
                     emotional: { title: 'Social Emotional', items: [] },
                     physical: { title: 'Physical', items: [] },
                     mental: { title: 'Mental', items: [] }
                 };
                 
-                this.chartSections = initialData.chartSections || {
+                this.chartSections = data.chartSections || {
                     'spiritual (chart)': { title: 'Spiritual Development', subsections: {} },
                     'emotional (chart)': { title: 'Social Emotional Development', subsections: {} },
                     'physical (chart)': { title: 'Physical Development', subsections: {} },

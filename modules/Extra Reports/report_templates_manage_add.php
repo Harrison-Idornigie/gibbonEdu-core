@@ -57,48 +57,45 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
         }
     }
 
-    // Initialize template data
+    // Initialize template data for Alpine.js
+    $templateData = [
+        'sections' => [
+            'spiritual' => ['title' => 'Spiritual', 'items' => []],
+            'emotional' => ['title' => 'Social Emotional', 'items' => []],
+            'physical' => ['title' => 'Physical', 'items' => []],
+            'mental' => ['title' => 'Mental', 'items' => []]
+        ],
+        'chartSections' => [
+            'spiritual (chart)' => ['title' => 'Spiritual Development', 'subsections' => []],
+            'emotional (chart)' => ['title' => 'Social Emotional Development', 'subsections' => []],
+            'physical (chart)' => ['title' => 'Physical Development', 'subsections' => []],
+            'mental (chart)' => ['title' => 'Mental Development', 'subsections' => []]
+        ]
+    ];
+
+    if ($preloadData !== null) {
+        // If preloading, merge with existing template data
+        if (!empty($preloadData['sections'])) {
+            $templateData['sections'] = json_decode($preloadData['sections'], true);
+        }
+        if (!empty($preloadData['chartSections'])) {
+            $templateData['chartSections'] = json_decode($preloadData['chartSections'], true);
+        }
+    }
+
+    // Add template editor script
     $page->scripts->add('template-editor', 'modules/Extra Reports/js/template-editor.js');
-    $page->scripts->add('template-data', '<script>
-        window.templateData = ' . json_encode([
-            'sections' => [
-                'spiritual' => [
-                    'title' => 'Spiritual',
-                    'items' => []
-                ],
-                'emotional' => [
-                    'title' => 'Social Emotional',
-                    'items' => []
-                ],
-                'physical' => [
-                    'title' => 'Physical',
-                    'items' => []
-                ],
-                'mental' => [
-                    'title' => 'Mental',
-                    'items' => []
-                ]
-            ],
-            'chartSections' => [
-                'spiritual (chart)' => [
-                    'title' => 'Spiritual Development',
-                    'subsections' => []
-                ],
-                'emotional (chart)' => [
-                    'title' => 'Social Emotional Development',
-                    'subsections' => []
-                ],
-                'physical (chart)' => [
-                    'title' => 'Physical Development',
-                    'subsections' => []
-                ],
-                'mental (chart)' => [
-                    'title' => 'Mental Development',
-                    'subsections' => []
-                ]
-            ]
-        ]) . ';
-    </script>', ['type' => 'inline']);
+    
+    // Add template data script after template editor
+    $page->scripts->add('template-data', "
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                window.templateData = " . json_encode($templateData) . ";
+                // Dispatch a custom event to notify Alpine component that data is ready
+                window.dispatchEvent(new CustomEvent('template-data-ready'));
+            });
+        </script>
+    ");
 
     // Get list of file-based templates
     $templatesDir = __DIR__ . '/templates/reportCards/';
