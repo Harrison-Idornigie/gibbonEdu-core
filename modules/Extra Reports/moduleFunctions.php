@@ -21,26 +21,25 @@ use Gibbon\Forms\Form;
 use Gibbon\Services\Format;
 
 /**
- * Get the list of available report card templates
+ * Get list of available report card templates from the database
  *
- * @return array
+ * @param PDO $pdo Database connection
+ * @return array Array of template names indexed by template ID
  */
-function getReportCardTemplates() {
-    $templates = [];
-    $dir = __DIR__ . '/templates/reportCards';
-    if (is_dir($dir)) {
-        $files = scandir($dir);
-        foreach ($files as $file) {
-            if (substr($file, -4) == '.php') {
-                $name = substr($file, 0, -4);
-                if (substr($name, -6) == 'Report') {
-                    $name = substr($name, 0, -6);
-                }
-                $templates[$name] = ucfirst($name);
-            }
-        }
+function getReportCardTemplates($pdo = null) {
+    global $pdo;
+    
+    try {
+        $sql = "SELECT templateID, name 
+                FROM extraReportTemplate 
+                WHERE active = 'Y' 
+                ORDER BY name";
+        $result = $pdo->select($sql);
+        
+        return $result->fetchAll(PDO::FETCH_KEY_PAIR);
+    } catch (Exception $e) {
+        return [];
     }
-    return $templates;
 }
 
 /**

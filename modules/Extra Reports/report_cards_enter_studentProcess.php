@@ -59,28 +59,23 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
             throw new Exception('Database connection not available.');
         }
 
-        // Load template to get full item names
-        $templateFile = __DIR__ . "/templates/reportCards/{$template}Report.php";
-        require $templateFile;
+        // Load template from database
+        $templateData = ['templateID' => $template];
+        $sql = "SELECT sections, chartSections 
+                FROM extraReportTemplate 
+                WHERE templateID=:templateID AND active='Y'";
+        $templateResult = $pdo->selectOne($sql, $templateData);
         
-        // Debug log the template sections and items
-        error_log("Extra Reports: Template loaded with sections: " . print_r(array_keys($sections), true));
-        foreach ($sections as $sectionKey => $section) {
-            error_log("Extra Reports: Section '$sectionKey' has " . count($section['items']) . " items: " . print_r($section['items'], true));
+        if (empty($templateResult)) {
+            throw new Exception('Template not found in database.');
         }
-        
-        // Create reverse mapping of md5 hashes to full item names
-        $itemMap = [];
-        foreach ($sections as $sectionKey => $section) {
-            error_log("Extra Reports: Processing section '$sectionKey'");
-            foreach ($section['items'] as $item) {
-                $hash = md5($item);
-                $itemMap[$hash] = [
-                    'section' => $sectionKey,
-                    'name' => $item
-                ];
-                error_log("Extra Reports: Added mapping - Hash: $hash, Section: $sectionKey, Item: $item");
-            }
+
+        // Decode template sections
+        $sections = json_decode($templateResult['sections'], true);
+        $developmentSections = json_decode($templateResult['chartSections'], true);
+
+        if (!$sections || !is_array($sections)) {
+            throw new Exception('Invalid template structure.');
         }
 
         // Initialize data structures
@@ -104,19 +99,14 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                     array_shift($fieldParts);        // Remove 'development'
                 }
 
-                // Reconstruct section name
+                // Reconstruct section name with proper handling of social_emotional
                 $section = implode('_', $fieldParts);
                 
-                // Handle various (chart) suffix formats for backward compatibility
+                // Handle various (chart) suffix formats
                 if ($isDevelopment) {
-                    // First remove any existing variations
                     $section = str_replace(['_chart', '_(chart)', '_( chart)', ' (chart)', ' ( chart)'], '', $section);
-                    // Then add the standardized format
                     $section .= ' (chart)';
                 }
-
-                // Debug logging
-                error_log("Extra Reports: Processing field - Key: $key, Section: $section, Type: $type, Hash: $hash, IsDevelopment: " . ($isDevelopment ? 'true' : 'false'));
 
                 // Find the original item name from the hash
                 $itemName = '';
@@ -145,24 +135,28 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                 }
 
                 if (!empty($itemName)) {
+                    // Ensure section names are consistent (especially social_emotional)
+                    $sectionKey = $section;
+                    if ($section === 'emotional') {
+                        $sectionKey = 'social_emotional';
+                    }
+
                     if ($isDevelopment) {
-                        // Store in development data structure
-                        if (!isset($developmentData[$section])) {
-                            $developmentData[$section] = [];
+                        if (!isset($developmentData[$sectionKey])) {
+                            $developmentData[$sectionKey] = [];
                         }
-                        if (!isset($developmentData[$section][$itemName])) {
-                            $developmentData[$section][$itemName] = [];
+                        if (!isset($developmentData[$sectionKey][$itemName])) {
+                            $developmentData[$sectionKey][$itemName] = [];
                         }
-                        $developmentData[$section][$itemName][$type] = $value;
+                        $developmentData[$sectionKey][$itemName][$type] = $value;
                     } else {
-                        // Store in regular data structure
-                        if (!isset($regularData[$section])) {
-                            $regularData[$section] = [];
+                        if (!isset($regularData[$sectionKey])) {
+                            $regularData[$sectionKey] = [];
                         }
-                        if (!isset($regularData[$section][$itemName])) {
-                            $regularData[$section][$itemName] = [];
+                        if (!isset($regularData[$sectionKey][$itemName])) {
+                            $regularData[$sectionKey][$itemName] = [];
                         }
-                        $regularData[$section][$itemName][$type] = $value;
+                        $regularData[$sectionKey][$itemName][$type] = $value;
                     }
                 }
             }

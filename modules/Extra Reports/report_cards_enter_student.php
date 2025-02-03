@@ -70,22 +70,33 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         ->add(__('Enter Assessments'), 'report_cards_enter.php')
         ->add(Format::name('', $student['preferredName'], $student['surname'], 'Student'));
 
-    // Verify and load the report card template
-    $templateFile = __DIR__ . "/templates/reportCards/{$template}Report.php";
-    if (!file_exists($templateFile)) {
-        $page->addError(__('The specified template cannot be found.'));
+    // Get template data from database instead of file
+    try {
+        $data = ['templateID' => $template];
+        $sql = "SELECT sections, chartSections 
+                FROM extraReportTemplate 
+                WHERE templateID=:templateID AND active='Y'";
+        $result = $pdo->selectOne($sql, $data);
+        
+        if (empty($result)) {
+            $page->addError(__('The specified template cannot be found.'));
+            return;
+        }
+
+        // Decode JSON data from database
+        $sections = json_decode($result['sections'], true);
+        $developmentSections = json_decode($result['chartSections'], true);
+
+        // Validate template structure
+        if (!isset($sections) || !is_array($sections)) {
+            $page->addError(__('Template is invalid: sections not defined.'));
+            return;
+        }
+    } catch (Exception $e) {
+        $page->addError(__('Database error: ').$e->getMessage());
         return;
     }
 
-    // Load the template file which should define the $sections array
-    require $templateFile;
-    
-    // Validate template structure
-    if (!isset($sections) || !is_array($sections)) {
-        $page->addError(__('Template is invalid: sections not defined.'));
-        return;
-    }
-    
     // Initialize the assessment form
     $form = Form::create('reportCardEntry', $session->get('absoluteURL').'/modules/'.$session->get('module').'/report_cards_enter_studentProcess.php', 'post');
     $form->setFactory(DatabaseFormFactory::create($pdo));
