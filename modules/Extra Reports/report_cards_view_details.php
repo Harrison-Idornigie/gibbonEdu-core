@@ -67,19 +67,39 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
         $termData    = $termGateway->getByID($gibbonSchoolYearTermID);
         $termName    = $termData['name'] ?? $gibbonSchoolYearTermID;
 
-        $templateFile = __DIR__ . "/templates/reportCards/{$template}Report.php";
-        if (! file_exists($templateFile)) {
-            $page->addError(__('The specified template cannot be found.'));
+        // Load template from database
+        try {
+            $templateData = ['templateID' => $template];
+            $sql = "SELECT name, sections, chartSections 
+                    FROM extraReportTemplate 
+                    WHERE templateID=:templateID AND active='Y'";
+            $templateResult = $pdo->selectOne($sql, $templateData);
+            
+            if (empty($templateResult)) {
+                $page->addError(__('The specified template cannot be found.'));
+                return;
+            }
+
+            // Decode template sections
+            $sections = json_decode($templateResult['sections'], true);
+            $developmentSections = json_decode($templateResult['chartSections'], true);
+            $templateName = $templateResult['name'];
+
+            if (!$sections || !is_array($sections)) {
+                $page->addError(__('Invalid template structure.'));
+                return;
+            }
+        } catch (Exception $e) {
+            $page->addError(__('Database error: ').$e->getMessage());
             return;
         }
-        require $templateFile;
 
         echo "<div class='container mx-auto px-4'>";
         echo "<div class='bg-white shadow-md rounded-lg p-6 mb-8'>";
         echo "<h2 class='text-3xl font-bold mb-4'>" . Format::name('', $student['preferredName'], $student['surname'], 'Student') . " <span class='text-gray-600'>({$student['formGroup']})</span></h2>";
         echo "<div class='grid grid-cols-3 gap-4 text-gray-700'>";
         echo "<div><strong>" . __('Term') . ":</strong> {$termName}</div>";
-        echo "<div><strong>" . __('Template') . ":</strong> " . ucfirst($template) . "</div>";
+        echo "<div><strong>" . __('Template') . ":</strong> {$templateName}</div>";
         echo "<div><strong>" . __('Last Updated') . ":</strong> " . Format::dateTime($assessment['timestamp']) . "</div>";
         echo "</div>";
         echo "</div>";
