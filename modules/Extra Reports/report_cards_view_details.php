@@ -148,24 +148,24 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
             
             // Start SVG container with reduced size
             echo '<div class="relative p-2" style="width: 700px; height: 700px;">';
-            echo '<svg class="absolute inset-0 m-2 p-2" viewBox="-260 -260 520 520">';
+            echo '<svg class="absolute inset-0 m-2 p-2" viewBox="-300 -300 600 600">';
             
             // Base circles
             echo '<circle cx="0" cy="0" r="250" fill="none" stroke="#22c55e" stroke-width="2"/>';
             echo '<circle cx="0" cy="0" r="190" fill="none" stroke="#facc15" stroke-width="2"/>';
             echo '<circle cx="0" cy="0" r="130" fill="none" stroke="#ef4444" stroke-width="2"/>';
             
-            // Cross lines
+            // Cross lines rotated 45 degrees
             // Draw main quadrant dividing lines
-            echo '<line x1="-250" y1="0" x2="250" y2="0" stroke="black" stroke-width="2"/>';  // Horizontal line
-            echo '<line x1="0" y1="-250" x2="0" y2="250" stroke="black" stroke-width="2"/>';  // Vertical line
+            echo '<line x1="-176.78" y1="-176.78" x2="176.78" y2="176.78" stroke="black" stroke-width="2"/>';  // NW to SE line
+            echo '<line x1="-176.78" y1="176.78" x2="176.78" y2="-176.78" stroke="black" stroke-width="2"/>';  // SW to NE line
             
             // Process each quadrant
             $quadrantAngles = [
-                'mental' => 90,    // Right quadrant
-                'emotional' => 0,  // Top quadrant
-                'spiritual' => 180, // Bottom quadrant
-                'physical' => 270  // Left quadrant
+                'mental' => 225,         // NW to NE (135-225)
+                'spiritual' => 315,      // NE to SE (225-315)
+                'physical' => 45,       // SE to SW (315-45)
+                'social_emotional' => 135 // SW to NW (45-135)
             ];
             
             foreach ($developmentSections as $sectionKey => $section) {
@@ -196,21 +196,26 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                         $path = calculateSectionPath($startAngle, $endAngle, $innerRadius, $outerRadius);
                         echo sprintf('<path d="%s" fill="%s" opacity="0.9"/>', $path, $fillColor);
                         
-                        // Add section divider line
+                        // Draw section divider line with correct angle
                         if ($i > 0) { // Don't draw divider for first section in quadrant
-                            echo sprintf('<line x1="0" y1="0" x2="%f" y2="%f" stroke="black" stroke-width="0.5" transform="rotate(%f)"/>',
-                                0, -250, $startAngle
+                            $dividerRad = $startAngle * M_PI / 180;
+                            $endX = cos($dividerRad) * 250;
+                            $endY = sin($dividerRad) * 250;
+                            echo sprintf('<line x1="0" y1="0" x2="%f" y2="%f" stroke="black" stroke-width="0.5"/>',
+                                $endX, $endY
                             );
                         }
                         
                         // Add label with improved positioning
                         $labelAngle = $startAngle + ($sectionAngle / 2);
-                        $labelRad = ($labelAngle - 90) * M_PI / 180;
-                        $labelX = cos($labelRad) * 215;
-                        $labelY = sin($labelRad) * 215;
+                        $labelRad = $labelAngle * M_PI / 180;
+                        $labelRadius = 225; // Increased from 215 for better spacing
+                        $labelX = cos($labelRad) * $labelRadius;
+                        $labelY = sin($labelRad) * $labelRadius;
                         
-                        // Adjust text rotation for better readability
+                        // Adjust text rotation for better readability based on quadrant position
                         $textRotation = $labelAngle;
+                        // Flip text if it's in the bottom half to keep text readable from outside
                         if ($labelAngle > 90 && $labelAngle < 270) {
                             $textRotation += 180;
                         }
@@ -271,29 +276,32 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
                     }
                 }
                 
-                // Add quadrant label
+                // Add quadrant label with improved positioning
                 $quadrantLabelAngle = $quadrantStart + 45;
-                $quadrantLabelRad = ($quadrantLabelAngle - 90) * M_PI / 180;
-                $quadrantLabelX = cos($quadrantLabelRad) * 275;
-                $quadrantLabelY = sin($quadrantLabelRad) * 275;
+                $quadrantLabelRad = $quadrantLabelAngle * M_PI / 180;
+                // Adjust radius based on quadrant position for more consistent spacing
+
+                $quadrantLabelRadius = ($quadrantLabelAngle > 45 && $quadrantLabelAngle < 180) ? 280 : 270;
+
+ 
+                // $quadrantLabelRadius = 270; // Increased radius for quadrant labels
+                $quadrantLabelX = cos($quadrantLabelRad) * $quadrantLabelRadius;
+                $quadrantLabelY = sin($quadrantLabelRad) * $quadrantLabelRadius;
                 
-                // Adjust quadrant label rotation and baseline
+                // Adjust quadrant label rotation for readability
                 $quadrantTextRotation = $quadrantLabelAngle;
-                $dominantBaseline = 'middle'; // Default to middle alignment
-                
-                if ($quadrantLabelAngle > 90 && $quadrantLabelAngle < 270) {
-                    $quadrantTextRotation += 180;
+                if ($quadrantLabelAngle > 0 && $quadrantLabelAngle < 180) {
+                    $quadrantTextRotation -= 90;
+                } else {
+                    $quadrantTextRotation += 90;
                 }
-                
-                // Adjust baseline based on quadrant position
-                if ($quadrantStart == 0) { // Top quadrant (Emotional)
-                    $dominantBaseline = 'text-after-edge';
-                } else if ($quadrantStart == 180) { // Bottom quadrant (Spiritual)
-                    $dominantBaseline = 'text-before-edge';
-                }
-                
-                echo sprintf('<text x="%f" y="%f" text-anchor="middle" dominant-baseline="%s" font-weight="bold" transform="rotate(%f %f %f)">%s</text>',
-                    $quadrantLabelX, $quadrantLabelY, $dominantBaseline, $quadrantTextRotation, $quadrantLabelX, $quadrantLabelY, ucfirst($displayKey)
+                echo sprintf('<text x="%f" y="%f" text-anchor="middle" font-size="12" font-weight="bold" transform="rotate(%f %f %f)">%s</text>',
+                    $quadrantLabelX,
+                    $quadrantLabelY,
+                    $quadrantTextRotation,
+                    $quadrantLabelX,
+                    $quadrantLabelY,
+                    ucfirst(str_replace('_', ' ', $displayKey))
                 );
             }
             
@@ -309,9 +317,9 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_cards
 
 // Helper function to calculate SVG path for a section
 function calculateSectionPath($startAngle, $endAngle, $innerRadius, $outerRadius) {
-    // Convert angles to radians
-    $startRad = ($startAngle - 90) * M_PI / 180;
-    $endRad = ($endAngle - 90) * M_PI / 180;
+    // Convert angles to radians - no need for -90 adjustment since we're already using the correct coordinate system
+    $startRad = $startAngle * M_PI / 180;
+    $endRad = $endAngle * M_PI / 180;
     
     // Calculate points
     $startOuterX = cos($startRad) * $outerRadius;
