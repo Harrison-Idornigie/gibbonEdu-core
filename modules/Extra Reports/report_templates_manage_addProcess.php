@@ -19,9 +19,6 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
-use Gibbon\Forms\Form;
-use Gibbon\Forms\DatabaseFormFactory;
-use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Data\Validator;
 
 require_once '../../gibbon.php';
@@ -40,9 +37,9 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
     exit;
 } else {
     // Proceed!
-    $name = $_POST['name'] ?? '';
-    $description = $_POST['description'] ?? '';
-    $sectionsJson = $_POST['sections'] ?? '[]';
+    $name              = $_POST['name'] ?? '';
+    $description       = $_POST['description'] ?? '';
+    $sectionsJson      = $_POST['sections'] ?? '[]';
     $chartSectionsJson = $_POST['chartSections'] ?? '[]';
 
     // Validate required fields
@@ -53,8 +50,8 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
 
     // Check name uniqueness
     try {
-        $data = array('name' => $name);
-        $sql = "SELECT COUNT(*) FROM extraReportTemplate WHERE name=:name";
+        $data   = ['name' => $name];
+        $sql    = "SELECT COUNT(*) FROM extraReportTemplate WHERE name=:name";
         $result = $connection2->prepare($sql);
         $result->execute($data);
         if ($result->fetchColumn() > 0) {
@@ -76,17 +73,22 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
 
         // Validate section types
         $validTypes = ['spiritual', 'emotional', 'physical', 'mental'];
-        
+
         // Keep sections in their original format since it matches the template
         $templateSections = [];
         foreach ($sections as $type => $section) {
-            if (!in_array($type, $validTypes)) continue;
-            if (empty($section['title'])) continue;
-            
+            if (! in_array($type, $validTypes)) {
+                continue;
+            }
+
+            if (empty($section['title'])) {
+                continue;
+            }
+
             $templateSections[$type] = [
                 'title' => trim($section['title']),
-                'items' => array_values(array_filter($section['items'] ?? [], function($item) {
-                    return !empty($item);
+                'items' => array_values(array_filter($section['items'] ?? [], function ($item) {
+                    return ! empty($item);
                 }))
             ];
         }
@@ -101,32 +103,43 @@ if (isActionAccessible($guid, $connection2, '/modules/Extra Reports/report_templ
         // Keep chart sections in their original format
         $templateChartSections = [];
         foreach ($chartSections as $type => $section) {
-            if (!preg_match('/(mental|emotional|spiritual|physical) \(chart\)/', $type)) continue;
-            if (empty($section['title'])) continue;
+            if (! preg_match('/(mental|emotional|spiritual|physical) \(chart\)/', $type)) {
+                continue;
+            }
 
-            $templateChartSections[$type] = [
-                'title' => trim($section['title']),
-                'subsections' => array_filter($section['subsections'] ?? [], function($item) {
-                    return !empty($item);
+            if (empty($section['title'])) {
+                continue;
+            }
+
+            // Convert emotional to social_emotional for chart sections
+            $sectionType = $type;
+            if ($type === 'emotional (chart)') {
+                $sectionType = 'social_emotional (chart)';
+            }
+
+            $templateChartSections[$sectionType] = [
+                'title'       => trim($section['title']),
+                'subsections' => array_filter($section['subsections'] ?? [], function ($item) {
+                    return ! empty($item);
                 })
             ];
         }
 
         // Insert into database
-        $data = array(
-            'name' => $name,
-            'description' => $description,
-            'sections' => json_encode($templateSections),
+        $data = [
+            'name'          => $name,
+            'description'   => $description,
+            'sections'      => json_encode($templateSections),
             'chartSections' => json_encode($templateChartSections),
-            'active' => 'Y',
-            'timestamp' => date('Y-m-d H:i:s')
-        );
+            'active'        => 'Y',
+            'timestamp'     => date('Y-m-d H:i:s'),
+        ];
 
-        $sql = "INSERT INTO extraReportTemplate 
-                (name, description, sections, chartSections, active, timestamp) 
-                VALUES 
+        $sql = "INSERT INTO extraReportTemplate
+                (name, description, sections, chartSections, active, timestamp)
+                VALUES
                 (:name, :description, :sections, :chartSections, :active, :timestamp)";
-        
+
         $result = $connection2->prepare($sql);
         $result->execute($data);
 
