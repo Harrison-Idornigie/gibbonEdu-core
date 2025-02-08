@@ -100,7 +100,11 @@ if (isActionAccessible($guid, $connection2, '/modules/Reports/templates_manage_e
     $row->addLabel('orientation', __('Orientation'));
     $row->addSelect('orientation')->fromArray($orientations)->required();
 
-    $pageSizes = ['A4' => __('A4'), 'LETTER' => __('US Letter')];
+    $pageSizes = [
+        'A3' => __('A3 (297 × 420 mm)'),
+        'A4' => __('A4 (210 × 297 mm)'), 
+        'LETTER' => __('US Letter (216 × 279 mm)')
+    ];
     $row = $form->addRow();
     $row->addLabel('pageSize', __('Page Size'));
     $row->addSelect('pageSize')->fromArray($pageSizes)->required();

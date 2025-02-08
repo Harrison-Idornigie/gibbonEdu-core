@@ -21,13 +21,13 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 namespace Gibbon\Module\Reports\Renderer;
 
-use Gibbon\Module\Reports\ReportData;
-use Gibbon\Module\Reports\ReportTemplate;
-use Gibbon\Module\Reports\ReportSection;
 use Gibbon\Module\Reports\Renderer\ReportRendererInterface;
-use Mpdf\Mpdf as Mpdf;
+use Gibbon\Module\Reports\ReportData;
+use Gibbon\Module\Reports\ReportSection;
+use Gibbon\Module\Reports\ReportTemplate;
 use Mpdf\Config\ConfigVariables;
 use Mpdf\Config\FontVariables;
+use Mpdf\Mpdf as Mpdf;
 use Twig\Environment;
 
 class MpdfRenderer implements ReportRendererInterface
@@ -39,12 +39,12 @@ class MpdfRenderer implements ReportRendererInterface
     protected $absolutePath;
     protected $filename;
 
-    protected $mode = 0;
+    protected $mode      = 0;
     protected $firstPage = true;
-    protected $lastPage = false;
+    protected $lastPage  = false;
 
-    protected $preProcess = array();
-    protected $postProcess = array();
+    protected $preProcess  = [];
+    protected $postProcess = [];
 
     public function __construct(Environment $templateEngine)
     {
@@ -53,8 +53,12 @@ class MpdfRenderer implements ReportRendererInterface
 
     public function setMode(int $bitmask)
     {
-        if ($bitmask == 0) $this->mode = 0;
-        else $this->mode |= $bitmask;
+        if ($bitmask == 0) {
+            $this->mode = 0;
+        } else {
+            $this->mode |= $bitmask;
+        }
+
     }
 
     public function hasMode(int $bitmask)
@@ -78,24 +82,24 @@ class MpdfRenderer implements ReportRendererInterface
 
     public function render(ReportTemplate $template, array $input, string $output = '')
     {
-        $this->template = $template;
-        $this->absolutePath = $template->getData('absolutePath');
+        $this->template        = $template;
+        $this->absolutePath    = $template->getData('absolutePath');
         $this->customAssetPath = $template->getData('customAssetPath');
-        $this->firstPage = true;
-        $this->lastPage = false;
+        $this->firstPage       = true;
+        $this->lastPage        = false;
 
         $customTemplatePath = $this->absolutePath . $this->customAssetPath . '/templates';
         if (is_dir($customTemplatePath)) {
             $this->twig->getLoader()->prependPath($customTemplatePath);
         }
 
-        $reports = (is_array($input)) ? $input : array($input);
+        $reports        = (is_array($input)) ? $input : [$input];
         $this->filename = $output;
 
         $this->setupDocument();
 
         foreach ($reports as $index => $reportData) {
-            $lastReport = $index == count($reports)-1;
+            $lastReport = $index == count($reports) - 1;
 
             if ($reportData instanceof ReportData) {
                 $this->setupReport($reportData);
@@ -106,7 +110,7 @@ class MpdfRenderer implements ReportRendererInterface
 
         if ($this->hasMode(self::OUTPUT_CONTINUOUS)) {
             $finalReport = end($reports);
-            $outputPath = $this->getFilePath($finalReport);
+            $outputPath  = $this->getFilePath($finalReport);
             $this->finishDocument($outputPath);
         }
     }
@@ -115,7 +119,7 @@ class MpdfRenderer implements ReportRendererInterface
     {
         $sections = $this->template->getSections();
 
-        if (!empty($sections)) {
+        if (! empty($sections)) {
             foreach ($sections as $section) {
                 $this->renderSection($section, $reportData);
             }
@@ -139,9 +143,9 @@ class MpdfRenderer implements ReportRendererInterface
 
         if ($this->firstPage) {
             $this->pdf->AddPageByArray([
-                'type' => 'ODD',
+                'type'         => 'ODD',
                 'resetpagenum' => 1,
-                'suppress' => 'off',
+                'suppress'     => 'off',
             ]);
         } elseif ($section->hasFlag(ReportSection::PAGE_BREAK_BEFORE)) {
             $this->pdf->AddPageByArray(['suppress' => 'off']);
@@ -153,7 +157,7 @@ class MpdfRenderer implements ReportRendererInterface
         $html = $this->renderSectionToHTML($section, $reportData);
 
         if ($section->x != null && $section->y != null) {
-            $this->pdf->WriteFixedPosHTML($html, floatval($section->x), floatval($section->y), !empty($section->width) ? $section->width : '100%', !empty($section->height) ? $section->height : '100%', 'visible');
+            $this->pdf->WriteFixedPosHTML($html, floatval($section->x), floatval($section->y), ! empty($section->width) ? $section->width : '100%', ! empty($section->height) ? $section->height : '100%', 'visible');
         } else {
             $this->pdf->writeHTML($html);
         }
@@ -187,37 +191,47 @@ class MpdfRenderer implements ReportRendererInterface
     protected function setupDocument()
     {
         $defaultConfig = (new ConfigVariables())->getDefaults();
-        $fontDirs = $defaultConfig['fontDir'] ?? [];
+        $fontDirs      = $defaultConfig['fontDir'] ?? [];
 
         $defaultFontConfig = (new FontVariables())->getDefaults();
-        $fontData = $defaultFontConfig['fontdata'] ?? [];
+        $fontData          = $defaultFontConfig['fontdata'] ?? [];
 
         $config = [
-            'mode' => 'utf-8',
-            'format' => strtoupper($this->template->getData('pageSize', 'A4')) == 'LETTER' ? [215.9, 279.4] : [210, 297],
-            'orientation' => $this->template->getData('orientation', 'P'),
-            'useOddEven' => '0',
-            'mirrorMargins' => $this->hasMode(self::OUTPUT_MIRROR) ? '1' : '0',
+            'mode'                 => 'utf-8',
+            'format'               => (function () {
+                $pageSize = strtoupper($this->template->getData('pageSize', 'A4'));
+                switch ($pageSize) {
+                    case 'LETTER':
+                        return [215.9, 279.4];
+                    case 'A3':
+                        return [297, 420];
+                    default:
+                        return [210, 297]; // A4
+                }
+            })(),
+            'orientation'          => $this->template->getData('orientation', 'P'),
+            'useOddEven'           => '0',
+            'mirrorMargins'        => $this->hasMode(self::OUTPUT_MIRROR) ? '1' : '0',
 
-            'margin_top' => $this->template->getData('marginY', '10'),
-            'margin_bottom' => $this->template->getData('marginY', '10'),
-            'margin_left' => $this->template->getData('marginLeft', $this->template->getData('marginX', '10')),
-            'margin_right' => $this->template->getData('marginRight', $this->template->getData('marginX', '10')),
+            'margin_top'           => $this->template->getData('marginY', '10'),
+            'margin_bottom'        => $this->template->getData('marginY', '10'),
+            'margin_left'          => $this->template->getData('marginLeft', $this->template->getData('marginX', '10')),
+            'margin_right'         => $this->template->getData('marginRight', $this->template->getData('marginX', '10')),
 
-            'setAutoTopMargin' => 'stretch',
-            'setAutoBottomMargin' => 'stretch',
-            'autoMarginPadding' => 1,
+            'setAutoTopMargin'     => 'stretch',
+            'setAutoBottomMargin'  => 'stretch',
+            'autoMarginPadding'    => 1,
 
             'shrink_tables_to_fit' => 0,
             'defaultPagebreakType' => 'cloneall',
 
-            'tempDir' =>  $this->absolutePath . '/uploads/reports/temp',
-            'fontDir' => array_merge($fontDirs, [
+            'tempDir'              => $this->absolutePath . '/uploads/reports/temp',
+            'fontDir'              => array_merge($fontDirs, [
                 $this->absolutePath . $this->customAssetPath . '/fonts',
             ]),
 
-            'fontdata' => $fontData + $this->template->getData('fonts', []),
-            'default_font' => 'sans-serif',
+            'fontdata'             => $fontData + $this->template->getData('fonts', []),
+            'default_font'         => 'sans-serif',
         ];
 
         $stylesheetPath = $this->absolutePath . '/modules/Reports/templates/' . $this->template->getData('stylesheet');
@@ -233,9 +247,9 @@ class MpdfRenderer implements ReportRendererInterface
         $this->pdf = new Mpdf($config);
 
         $this->template->addData([
-            'basePath' => $this->absolutePath,
+            'basePath'  => $this->absolutePath,
             'assetPath' => $this->absolutePath . $this->customAssetPath,
-            'isDraft' => $this->template->getIsDraft(),
+            'isDraft'   => $this->template->getIsDraft(),
         ]);
     }
 
@@ -278,8 +292,8 @@ class MpdfRenderer implements ReportRendererInterface
 
     protected function finishDocument($outputPath)
     {
-        if (!empty($this->pdf)) {
-            if (!file_exists(dirname($outputPath))) {
+        if (! empty($this->pdf)) {
+            if (! file_exists(dirname($outputPath))) {
                 mkdir(dirname($outputPath), 0755, true);
             }
 
@@ -307,14 +321,14 @@ class MpdfRenderer implements ReportRendererInterface
             if ($this->getPageNumber() % 2 != 0) {
                 $this->setFooter(true);
                 $this->pdf->SetHTMLHeaderByName('header0', 'O');
-                
+
                 $this->pdf->AddPageByArray([
-                    'type' => 'NEXT-ODD',
-                    'resetpagenum' => 1,
-                    'suppress' => 'on',
-                    'odd-header-name' => '',
+                    'type'             => 'NEXT-ODD',
+                    'resetpagenum'     => 1,
+                    'suppress'         => 'on',
+                    'odd-header-name'  => '',
                     'even-header-name' => '',
-                    'odd-footer-name' => '',
+                    'odd-footer-name'  => '',
                     'even-footer-name' => '',
                 ]);
                 $this->pdf->SetFooter('');
@@ -325,7 +339,7 @@ class MpdfRenderer implements ReportRendererInterface
         // Continue the current document after a report for continuous output
         if ($this->hasMode(self::OUTPUT_CONTINUOUS)) {
             $this->firstPage = true;
-            $this->lastPage = $lastReport ? true : false;
+            $this->lastPage  = $lastReport ? true : false;
         } else {
             $outputPath = $this->getFilePath($reportData);
             $this->finishDocument($outputPath);
@@ -334,13 +348,15 @@ class MpdfRenderer implements ReportRendererInterface
 
     protected function setHeader($forceFirst = false)
     {
-        if (empty($this->headers)) return;
+        if (empty($this->headers)) {
+            return;
+        }
 
         $docPageNum = $forceFirst ? 0 : $this->getPageNumber();
-        $pageNum = $this->lastPage && !($docPageNum == 1) ? -1 : $docPageNum + 1;
+        $pageNum    = $this->lastPage && ! ($docPageNum == 1) ? -1 : $docPageNum + 1;
 
         $defaultHeader = isset($this->headers[0]) ? 'header0' : false;
-        $headerName = isset($this->headers[$pageNum]) ? 'header' . $pageNum : $defaultHeader;
+        $headerName    = isset($this->headers[$pageNum]) ? 'header' . $pageNum : $defaultHeader;
 
         $this->pdf->SetHTMLHeaderByName($headerName, 'O', $this->lastPage);
         $this->pdf->SetHTMLHeaderByName($headerName, 'E', $this->lastPage);
@@ -348,12 +364,14 @@ class MpdfRenderer implements ReportRendererInterface
 
     protected function setFooter($forceLast = false)
     {
-        if (empty($this->footers)) return;
+        if (empty($this->footers)) {
+            return;
+        }
 
-        $docPageNum = max($this->getPageNumber(), 1);
-        $pageNum = $this->lastPage || $forceLast ? -1 : $docPageNum;
+        $docPageNum    = max($this->getPageNumber(), 1);
+        $pageNum       = $this->lastPage || $forceLast ? -1 : $docPageNum;
         $defaultFooter = isset($this->footers[0]) ? 'footer0' : false;
-        $footerName = isset($this->footers[$pageNum]) ? 'footer' . $pageNum : $defaultFooter;
+        $footerName    = isset($this->footers[$pageNum]) ? 'footer' . $pageNum : $defaultFooter;
 
         $this->pdf->SetHTMLFooterByName($footerName, 'O');
         $this->pdf->SetHTMLFooterByName($footerName, 'E');
@@ -361,7 +379,9 @@ class MpdfRenderer implements ReportRendererInterface
 
     protected function runPreProcess(ReportData &$reportData)
     {
-        if (empty($reportData)) return;
+        if (empty($reportData)) {
+            return;
+        }
 
         foreach ($this->preProcess as $name => $callable) {
             try {
@@ -375,7 +395,9 @@ class MpdfRenderer implements ReportRendererInterface
 
     protected function runPostProcess(ReportData &$reportData)
     {
-        if (empty($reportData)) return;
+        if (empty($reportData)) {
+            return;
+        }
 
         foreach ($this->postProcess as $name => $callable) {
             try {
