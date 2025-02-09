@@ -62,15 +62,17 @@ class FormGroupCriteria extends DataSource
     public function getData($ids = [])
     {
         $data = ['gibbonStudentEnrolmentID' => $ids['gibbonStudentEnrolmentID'], 'gibbonReportingCycleID' => $ids['gibbonReportingCycleID']];
-        $sql = "SELECT (CASE WHEN gibbonReportingCriteria.target = 'Per Group' THEN 'perGroup' ELSE 'perStudent' END) AS groupBy, 
+        $sql = "SELECT DISTINCT (CASE WHEN gibbonReportingCriteria.target = 'Per Group' THEN 'perGroup' ELSE 'perStudent' END) AS groupBy, 
                     gibbonReportingScope.name as scopeName,
                     gibbonReportingCriteria.name as criteriaName,
-                    gibbonReportingCriteria.description as criteriaDescription, 
+                    gibbonReportingCriteria.description as criteriaDescription,
+                    gibbonReportingCriteria.category as category,
                     gibbonReportingValue.value, 
                     gibbonReportingValue.comment, 
                     gibbonScaleGrade.descriptor,
                     gibbonReportingCriteriaType.valueType, 
-                    gibbonFormGroup.name as formGroupName, 
+                    gibbonYearGroup.name as yearGroupName, 
+                    gibbonYearGroup.nameShort as yearGroupNameShort
                     gibbonFormGroup.nameShort as formGroupNameShort
                 FROM gibbonStudentEnrolment 
                 JOIN gibbonReportingCriteria ON (gibbonReportingCriteria.gibbonFormGroupID=gibbonStudentEnrolment.gibbonFormGroupID)
