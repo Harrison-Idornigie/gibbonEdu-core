@@ -247,58 +247,72 @@ class YearGroupCriteriaGrowthChart extends YearGroupCriteria
         $item['quadrantLabelY']     = 0;
         $item['quadrantLabelAngle'] = 0;
 
-        // Extract dev type from category
-        preg_match('/Developmental Chart \((.*?)\)/', $item['category'], $matches);
-        $devType = $matches[1] ?? '';
+        // Debug log the incoming item
+        error_log("Processing item: " . json_encode([
+            'name' => $item['criteriaName'] ?? 'unknown',
+            'category' => $item['category'] ?? 'unknown',
+            'value' => $item['value'] ?? 'unknown'
+        ]));
 
-        if (! isset($quadrantAngles[$devType])) {
-            error_log("Warning: Invalid development type: $devType");
+        // Extract dev type from category with strict validation
+        if (!preg_match('/^Developmental Chart \((Mental|Spiritual|Physical|Emotional)\)$/', $item['category'] ?? '', $matches)) {
+            error_log("Invalid category format: " . ($item['category'] ?? 'unknown'));
             return;
         }
+        $devType = $matches[1];
+
+        // Ensure value is an integer between 1-3
+        $score = max(1, min(3, intval($item['value'] ?? 1)));
+        $item['value'] = $score; // Update the value to ensure it's an integer
 
         $startAngle = $quadrantAngles[$devType];
-        $score      = intval($item['value'] ?? 1);
 
-        // Validate score range
-        if ($score < 1 || $score > 3) {
-            error_log("Warning: Invalid score value {$score} for {$item['criteriaName']}, defaulting to 1");
-            $score = 1;
-        }
-
-        // Debug logging
-        error_log("Processing chart item for $devType: Score=$score, StartAngle=$startAngle");
-
-        // Calculate section angles with validation
-        $itemCount = count(array_filter($group, function ($c) use ($item) {
-            return $c['category'] === $item['category'];
+        // Get all items for this category
+        $categoryItems = array_values(array_filter($group, function ($c) use ($item) {
+            return ($c['category'] ?? '') === $item['category'];
         }));
 
+        $itemCount = count($categoryItems);
         if ($itemCount === 0) {
-            error_log("Warning: No items found for category {$item['category']}");
+            error_log("No items found for category: " . ($item['category'] ?? 'unknown'));
             return;
         }
 
-        // Get the index of current item within its category
-        $categoryItems = array_values(array_filter($group, function ($c) use ($item) {
-            return $c['category'] === $item['category'];
-        }));
-        $itemIndex = array_search($item, $categoryItems);
+        // Find item index by criteriaName
+        $itemIndex = array_search(
+            $item['criteriaName'],
+            array_column($categoryItems, 'criteriaName')
+        );
 
         if ($itemIndex === false) {
-            error_log("Warning: Could not find item index for {$item['criteriaName']}");
+            error_log("Could not find index for item: " . ($item['criteriaName'] ?? 'unknown'));
             return;
         }
 
-        $sectionAngle = 90 / max(1, $itemCount); // Prevent division by zero
+        // Calculate angles
+        $sectionAngle = 90 / $itemCount;
         $sectionStart = $startAngle + ($itemIndex * $sectionAngle);
-        $sectionEnd   = $sectionStart + $sectionAngle;
+        $sectionEnd = $sectionStart + $sectionAngle;
 
         // Calculate radii based on score
         $innerRadius = $score == 1 ? 0 : ($score == 2 ? 130 : 190);
         $outerRadius = $score == 1 ? 129 : ($score == 2 ? 189 : 249);
 
-        // Add SVG path with validation
+        // Debug log calculations
+        error_log("Calculation parameters: " . json_encode([
+            'devType' => $devType,
+            'score' => $score,
+            'itemCount' => $itemCount,
+            'itemIndex' => $itemIndex,
+            'sectionAngle' => $sectionAngle,
+            'sectionStart' => $sectionStart,
+            'sectionEnd' => $sectionEnd,
+            'innerRadius' => $innerRadius,
+            'outerRadius' => $outerRadius
+        ]));
+
         try {
+            // Generate SVG path
             $svgPath = $this->calculateSectionPath(
                 $sectionStart,
                 $sectionEnd,
@@ -306,34 +320,52 @@ class YearGroupCriteriaGrowthChart extends YearGroupCriteria
                 $outerRadius
             );
 
-            if (! $svgPath) {
+            if (empty($svgPath)) {
                 throw new \Exception("Failed to generate SVG path");
             }
 
             $item['svgPath'] = $svgPath;
 
-            // Add divider line coordinates
-            $dividerRad       = $sectionStart * M_PI / 180;
-            $item['dividerX'] = round(cos($dividerRad) * 250, 2);
-            $item['dividerY'] = round(sin($dividerRad) * 250, 2);
+            // Calculate divider line
+            $dividerRad = $sectionStart * M_PI / 180;
+            $item['dividerX'] = $this->validateCoordinate(cos($dividerRad) * 250);
+            $item['dividerY'] = $this->validateCoordinate(sin($dividerRad) * 250);
 
-            // Add label positions and angles
-            $labelAngle         = $sectionStart + ($sectionAngle / 2);
-            $labelPos           = $this->calculateLabelPosition($labelAngle, 225);
-            $item['labelX']     = round($labelPos['x'], 2);
-            $item['labelY']     = round($labelPos['y'], 2);
-            $item['labelAngle'] = round($labelAngle + ($labelAngle > 90 && $labelAngle < 270 ? 180 : 0), 2);
+            // Calculate label position
+            $labelAngle = $sectionStart + ($sectionAngle / 2);
+            $labelRad = $labelAngle * M_PI / 180;
+            $labelRadius = 225; // Consistent label distance
+            $item['labelX'] = $this->validateCoordinate(cos($labelRad) * $labelRadius);
+            $item['labelY'] = $this->validateCoordinate(sin($labelRad) * $labelRadius);
+            $item['labelAngle'] = $this->validateCoordinate(
+                $labelAngle + ($labelAngle > 90 && $labelAngle < 270 ? 180 : 0)
+            );
 
-            // Add quadrant label positions
-            $quadrantLabelAngle         = $startAngle + 45;
-            $quadrantLabelRadius        = $quadrantLabelAngle > 45 && $quadrantLabelAngle < 180 ? 280 : 270;
-            $quadrantPos                = $this->calculateLabelPosition($quadrantLabelAngle, $quadrantLabelRadius);
-            $item['quadrantLabelX']     = round($quadrantPos['x'], 2);
-            $item['quadrantLabelY']     = round($quadrantPos['y'], 2);
-            $item['quadrantLabelAngle'] = round($quadrantLabelAngle + ($quadrantLabelAngle > 0 && $quadrantLabelAngle < 180 ? -90 : 90), 2);
+            // Calculate quadrant label
+            $quadrantLabelAngle = $startAngle + 45;
+            $quadrantLabelRad = $quadrantLabelAngle * M_PI / 180;
+            $quadrantRadius = $quadrantLabelAngle > 45 && $quadrantLabelAngle < 180 ? 280 : 270;
+            $item['quadrantLabelX'] = $this->validateCoordinate(cos($quadrantLabelRad) * $quadrantRadius);
+            $item['quadrantLabelY'] = $this->validateCoordinate(sin($quadrantLabelRad) * $quadrantRadius);
+            $item['quadrantLabelAngle'] = $this->validateCoordinate(
+                $quadrantLabelAngle + ($quadrantLabelAngle > 0 && $quadrantLabelAngle < 180 ? -90 : 90)
+            );
+
+            // Debug log final values
+            error_log("Final SVG values: " . json_encode([
+                'svgPath' => $item['svgPath'],
+                'divider' => [$item['dividerX'], $item['dividerY']],
+                'label' => [$item['labelX'], $item['labelY'], $item['labelAngle']],
+                'quadrantLabel' => [
+                    $item['quadrantLabelX'],
+                    $item['quadrantLabelY'],
+                    $item['quadrantLabelAngle']
+                ]
+            ]));
 
         } catch (\Exception $e) {
-            error_log("Error processing chart item {$item['criteriaName']}: " . $e->getMessage());
+            error_log("Error in SVG calculations: " . $e->getMessage());
+            // Keep default 0 values on error
         }
     }
 }
