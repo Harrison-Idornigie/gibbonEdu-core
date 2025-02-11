@@ -162,7 +162,7 @@ class YearGroupCriteriaGrowthChart extends YearGroupCriteria
                             continue;
                         }
 
-                        if (isset($item['category']) && strpos($item['category'], 'Developmental Chart') === 0) {
+                        if (isset($item['category']) && strpos($item['category'], 'Chart') === 0) {
                             try {
                                 $processedItem = $item;
                                 $this->processChartItem($processedItem, $quadrantAngles, $data[$dataKey]);
@@ -255,7 +255,7 @@ class YearGroupCriteriaGrowthChart extends YearGroupCriteria
         ]));
 
         // Extract dev type from category with strict validation
-        if (!preg_match('/^Developmental Chart \((Mental|Spiritual|Physical|Emotional)\)$/', $item['category'] ?? '', $matches)) {
+        if (!preg_match('/^Chart \((Mental|Spiritual|Physical|Emotional)\)$/', $item['category'] ?? '', $matches)) {
             error_log("Invalid category format: " . ($item['category'] ?? 'unknown'));
             return;
         }
