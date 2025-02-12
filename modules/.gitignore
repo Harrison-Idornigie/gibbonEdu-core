@@ -64,7 +64,8 @@
 !/Extra Reports
 !/Extra Reports/**
 !/User Admin/**
-
+!/OpenAdmin Import
+!/OpenAdmin Import/**
 # black list some files and folders
 # in the module folders
 **/.DS_Store
