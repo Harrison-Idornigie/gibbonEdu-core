@@ -1,0 +1,234 @@
+name: Students
+type: openadmin_students
+category: People
+modes:
+    insert: Insert New Records
+    update: Update Existing Records
+    sync: Sync All Records
+
+table: gibbonPerson
+primaryKey: gibbonPersonID
+
+fields:
+    # Student Information
+    studid:
+        name: Student ID
+        desc: Must be unique if set
+        args:
+            required: true
+            unique: true
+            maxLength: 20
+            filter: trim
+
+    lastname:
+        name: Surname
+        desc: Family name
+        args:
+            required: true
+            maxLength: 60
+            filter: trim
+
+    firstname:
+        name: First Name
+        desc: Given name
+        args:
+            required: true
+            maxLength: 60
+            filter: trim
+
+    initial:
+        name: Middle Name
+        desc: Middle initial or name
+        args:
+            required: false
+            maxLength: 60
+            filter: trim
+
+    alias_lastname:
+        name: Alias Surname
+        desc: Alternative family name
+        args:
+            required: false
+            maxLength: 60
+            filter: trim
+
+    alias_firstname:
+        name: Alias First Name
+        desc: Alternative given name
+        args:
+            required: false
+            maxLength: 60
+            filter: trim
+
+    legal_lastname:
+        name: Legal Surname
+        desc: Legal family name
+        args:
+            required: false
+            maxLength: 60
+            filter: trim
+
+    legal_firstname:
+        name: Legal First Name
+        desc: Legal given name
+        args:
+            required: false
+            maxLength: 60
+            filter: trim
+
+    studnum:
+        name: Student Number
+        desc: Alternative student identifier
+        args:
+            required: false
+            maxLength: 20
+            filter: trim
+
+    grade:
+        name: Year Group
+        desc: Academic year group
+        args:
+            required: true
+            maxLength: 10
+            filter: trim
+
+    homeroom:
+        name: Form Group
+        desc: Class/Form group
+        args:
+            required: true
+            maxLength: 20
+            filter: trim
+
+    sex:
+        name: Gender
+        desc: M or F
+        args:
+            required: true
+            options: [M, F]
+            filter: trim
+
+    birthdate:
+        name: Date of Birth
+        desc: Format YYYY-MM-DD
+        args:
+            required: true
+            format: date
+            filter: trim
+
+    house:
+        name: House
+        desc: School house affiliation
+        args:
+            required: false
+            maxLength: 30
+            filter: trim
+
+    healthid:
+        name: Health ID
+        desc: Health/Medical identifier
+        args:
+            required: false
+            maxLength: 50
+            filter: trim
+
+    # Contact Information
+    address1:
+        name: Address
+        desc: Street address
+        args:
+            required: false
+            maxLength: 255
+            filter: trim
+
+    city1:
+        name: City
+        desc: City/Town
+        args:
+            required: false
+            maxLength: 100
+            filter: trim
+
+    pcode1:
+        name: Postal Code
+        desc: ZIP/Postal code
+        args:
+            required: false
+            maxLength: 20
+            filter: trim
+
+    # Emergency Contacts
+    emrelation:
+        name: Emergency Contact Relation
+        desc: Relationship to student
+        args:
+            required: false
+            maxLength: 50
+            filter: trim
+
+    emname:
+        name: Emergency Contact Name
+        desc: Full name
+        args:
+            required: false
+            maxLength: 100
+            filter: trim
+
+    emhphone:
+        name: Emergency Contact Home Phone
+        desc: Home telephone number
+        args:
+            required: false
+            maxLength: 30
+            filter: trim
+
+    emwphone:
+        name: Emergency Contact Work Phone
+        desc: Work telephone number
+        args:
+            required: false
+            maxLength: 30
+            filter: trim
+
+    emcell:
+        name: Emergency Contact Cell Phone
+        desc: Mobile telephone number
+        args:
+            required: false
+            maxLength: 30
+            filter: trim
+
+    # Medical Information
+    doctor:
+        name: Doctor Name
+        desc: Family physician
+        args:
+            required: false
+            maxLength: 100
+            filter: trim
+
+    docphone:
+        name: Doctor Phone
+        desc: Doctor's contact number
+        args:
+            required: false
+            maxLength: 30
+            filter: trim
+
+    # System Fields
+    status:
+        name: Status
+        desc: Student enrollment status
+        args:
+            required: true
+            default: "Full"
+            options: [Full, Expected, Left, Pending Approval]
+            filter: trim
+
+    email:
+        name: School Email
+        desc: School email address
+        args:
+            required: false
+            maxLength: 75
+            filter: trim|strtolower

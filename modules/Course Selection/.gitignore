@@ -1,0 +1,5 @@
+/vendor/**/.git
+/vendor/**/.gitignore
+/vendor/**/vendor
+/vendor/**/tests
+/vendor/**/phpunit.xml

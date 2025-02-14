@@ -1,0 +1,164 @@
+/*
+Gibbon, Flexible & Open School System
+Copyright (C) 2010, Ross Parker
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
+
+.hidden {
+    display: none;
+}
+
+.pullRight {
+    float: right;
+}
+
+.information {
+    border-left: 6px solid #666666;
+    color: #666666;
+    background-color: #eeeeee;
+    font-size: 12px;
+    padding: 10px;
+    margin: 10px 0px 15px 0px;
+    box-shadow: 2px 2px 2px rgba(50,50,50,0.15);
+}
+
+.courseChoiceContainer {
+    padding: 8px 4px;
+    border-radius: 3px;
+}
+
+.courseChoiceContainer:not(:last-of-type) {
+    margin-bottom: 0px;
+}
+
+.courseChoiceContainer:hover {
+    background-color: #ffffff;
+}
+
+.courseChoiceContainer[data-status='Recommended'] {
+    background-color: #d9edf7;
+}
+
+.courseChoiceContainer[data-status='Required'] {
+    background-color: #f0f0f0;
+}
+
+.courseChoiceContainer[data-status='Approved'] {
+    background-color: #D4F6DC;
+}
+
+.courseChoiceContainer[data-status='Conflict'] {
+    background-color: #FFD2A9;
+}
+
+.courseChoiceContainer[data-status='Failed'] {
+    background-color: #F6CECB;
+}
+
+.courseChoiceContainer[data-status='Unknown'] {
+    background-color: #dfdfdf;
+}
+
+.courseChoiceContainer span {
+    display: inline-block;
+}
+
+.courseProgressByOffering {
+    display: inline-block;
+    width: 400px;
+}
+
+.courseGrades {
+    padding: 3px 5px;
+}
+
+.courseTag {
+    padding: 2px;
+    opacity: 0.8;
+}
+
+.courseStatusIcon {
+    margin-left: 4px;
+    vertical-align: middle;
+    width: 14px;
+    height: 14px;
+}
+
+.courseStatusSelect {
+    font-size: 12px;
+    height: 26px;
+    width: 120px;
+    margin-top: -6px;
+    padding: 4px;
+}
+
+.courseChoiceContainer[data-status='']:not(:hover) .courseStatusSelect,
+.courseChoiceContainer[data-status='Removed']:not(:hover) .courseStatusSelect  {
+    visibility: hidden;
+}
+
+.progressBar {
+    display: inline-block;
+    height:22px;
+    background: rgba(0,0,0,0.035);
+    vertical-align: middle;
+    border: 1px solid rgba(0,0,0,0.5);
+}
+
+.progressBar .complete {
+    display: inline-block;
+    height: 100%;
+    background: #A88EDB;
+}
+
+.progressBar .highlight {
+    display: inline-block;
+    height: 100%;
+    background: #FFD263;
+}
+
+.drag-handle {
+    cursor: move;
+    height: 2px;
+    width: 21px;
+    max-width: 21px;
+    min-width: 21px;
+    background: transparent;
+    margin: 0px 12px 0px 0px;
+    border-color: #bbbbbb;
+    border-style: dotted;
+    border-width: 3px 0px 3px 0px;
+    display: inline-block;
+    vertical-align: middle;
+}
+
+#offeringBlocks .ui-sortable-helper {
+    display: table;
+    margin: 0;
+    padding: 0;
+}
+
+tr.rowHighlight:hover td {
+    background: #fff4da;
+}
+
+tr.message td {
+    background: #D0EAFD !important;
+}
+
+tr:target td {
+    background: #EDF7FF !important;
+}

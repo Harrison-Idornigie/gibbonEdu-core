@@ -1,0 +1,8 @@
+{
+    "config": {
+        "preferred-install": "dist"
+    },
+    "require": {
+        "tightenco/collect": "^5.4"
+    }
+}

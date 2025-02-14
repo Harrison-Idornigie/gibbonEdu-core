@@ -59,13 +59,23 @@
 !/CustomNotification/**
 !/Free Learning
 !/Free Learning/**
+!/ATL
+!/ATL/**
+!/Data Admin
+!/Data Admin/**
+!/Course Selection
+!/Course Selection/**
+!/Mastery Transcript
+!/Mastery Transcript/**
+!/Query Builder
+!/Query Builder/**
 !/API
 !/API/**
 !/Extra Reports
 !/Extra Reports/**
 !/User Admin/**
-!/OpenAdmin Import
-!/OpenAdmin Import/**
+!/OpenAdminImport
+!/OpenAdminImport/**
 # black list some files and folders
 # in the module folders
 **/.DS_Store

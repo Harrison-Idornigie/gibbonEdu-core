@@ -1,0 +1,176 @@
+CHANGELOG
+=========
+
+v1.6.03
+-------
+Update deletion actions to POST from GET
+
+v1.6.02
+-------
+Fixed JS bug introduced in ownership transfer
+
+v1.6.01
+-------
+Fixed CSS bug introduced in last version
+
+v1.6.00
+-------
+Transferred ownership from Ross Parker to Gibbon Foundation
+
+v1.5.13
+-------
+Fixed the bug of the filter box in the View ATLs page
+
+v1.5.12
+-------
+Enabled staff to view visualisation and data for unpublished ATLs
+
+v1.5.11
+-------
+Refactoring null coalesce 
+
+v1.5.10
+-------
+Fixed visualization showing data that has not gone live
+Added a Go Live date reminder to the Write ATL page
+
+v1.5.09
+-------
+Fixed student and parent PHP dashboard warning and exception
+
+v1.5.08
+-------
+Final refactoring of linkTop divs
+
+v1.5.07
+-------
+Refactoring of linkTop divs
+
+v1.5.06
+-------
+Added ATL chart to the dashboard tabs and View ATLs page
+
+v1.5.05
+-------
+Add ATL chart to the top of the student ATL page
+Update ATL visualization pages to display the course name
+
+v1.5.04
+-------
+Removed deprecated function calls
+
+v1.5.03
+-------
+Finished session variable refactoring
+
+v1.5.02
+-------
+Fixed rubric access permission in ATL Write
+
+v1.5.01
+-------
+Refactoring session variables
+
+v1.5.00
+-------
+Change Roll Groups to Form Groups, requires v22.0.00
+
+v1.4.13
+-------
+Update permissions so assistants can view and write ATLs
+
+v1.4.12
+-------
+Hide non-reportable teachers from teacher lists
+
+v1.4.11
+-------
+Fixed child selector issue in parent view
+
+v1.4.10
+-------
+Fixed View Class sidebar width issue
+
+v1.4.09
+-------
+Fixed bug causing notifications to be emailed to non-current students
+
+v1.4.08
+-------
+Fixed bug triggered by student having "Student" and "Student - Left" for the same class
+
+v1.4.07
+-------
+Fixed bug which created multiple columns for classes spanning multiple year groups
+
+v1.4.06
+-------
+Rubric script include fix
+
+v1.4.05
+-------
+Student view rubric fix
+
+v1.4.04
+-------
+Sidebar class selector width fix
+
+v1.4.03
+-------
+Rubric fix
+
+v1.4.02
+-------
+Fix a file-include related error in dashboard hooks
+
+v1.4.01
+-------
+Minor fixes to breadcrumbs
+
+v1.4.00
+-------
+Refactoring breadcrumbs and strings
+Requires Gibbon v17.0.00
+
+v1.3.00
+-------
+Updated to InnoDB database storage engine
+
+v1.2.00
+-------
+Object oriented rewrite and code cleanup
+
+v1.1.03
+-------
+Added indexes to improve database performance
+
+v1.1.02
+-------
+Fixed access to own class bug for department coordinators
+
+v1.1.01
+-------
+Improved sidebar classes
+
+v1.1.00
+-------
+Removed comment functionality
+Added ability to check off each student as complete
+
+v1.0.02
+-------
+Fixed rubric breakage for students who have left a class
+Hide comments from display to parents (comment will be removed in a future version)
+
+v1.0.01
+-------
+Enforced Reporting value for students in a class (from Timetable Admin)
+
+v1.0.00
+-------
+Added ability to create columns
+Ability to enter data
+Ability to view data (parents, students, staff)
+Hook into student profile
+Hook into parental dashboard
+CLI-triggered notifications

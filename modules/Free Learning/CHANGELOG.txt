@@ -1,5 +1,10 @@
 CHANGELOG
 =========
+v2.25.05
+-------
+Switched teacher Comment field in approval view from plain to rich text
+Removed non-reportable teachers and assistants from submission notifications
+
 v2.25.04
 -------
 Fixed bug causing left students to show in unit approval view

@@ -1,0 +1,206 @@
+details:
+    type: openadmin_staff
+    category: People
+    name: Staff
+    desc: Import staff data from OpenAdmin CSV export
+    table: gibbonStaff
+    modes: 
+        insert: Insert New Records
+        update: Update Existing Records
+        sync: Sync All Records
+
+access:
+    module: OpenAdminImport
+    action: Import OpenAdmin Data
+    category: Import
+
+primaryKey: gibbonStaffID
+
+uniqueKeys:
+    - username
+    - staffID
+
+fields:
+    # Basic Information
+    title:
+        name: Title
+        desc: e.g. Ms., Miss, Mr., Mrs., Dr.
+        args: 
+            required: false
+            maxLength: 5
+            filter: trim
+
+    surname:
+        name: Surname
+        desc: Family name
+        args: 
+            required: true
+            maxLength: 60
+            filter: trim
+
+    firstName:
+        name: First Name
+        desc: Given name
+        args: 
+            required: true
+            maxLength: 60
+            filter: trim
+
+    preferredName:
+        name: Preferred Name
+        desc: Most commonly used name
+        args: 
+            required: true
+            maxLength: 60
+            filter: trim
+
+    officialName:
+        name: Official Name
+        desc: Full name as shown in ID documents
+        args: 
+            required: true
+            maxLength: 150
+            filter: trim
+
+    gender:
+        name: Gender
+        desc: Male, Female or Other
+        args: 
+            required: true
+            options: [M, F, O]
+            filter: trim
+
+    dob:
+        name: Date of Birth
+        desc: Format YYYY-MM-DD
+        args: 
+            required: true
+            format: date
+            filter: trim
+
+    email:
+        name: Email
+        desc: Work email address
+        args: 
+            required: true
+            maxLength: 75
+            filter: trim|strtolower
+
+    # Employment Information
+    type:
+        name: Type
+        desc: Teaching or Support
+        args: 
+            required: true
+            options: [Teaching, Support]
+            filter: trim
+
+    status:
+        name: Status
+        desc: Full, Part Time, Left, etc
+        args: 
+            required: true
+            options: [Full, Part Time, Left]
+            filter: trim
+
+    jobTitle:
+        name: Job Title
+        desc: Staff member's role
+        args: 
+            required: true
+            maxLength: 100
+            filter: trim
+
+    # System Access
+    username:
+        name: Username
+        desc: Must be unique
+        args: 
+            required: true
+            unique: true
+            maxLength: 20
+            filter: trim|strtolower
+
+    staffID:
+        name: Staff ID
+        desc: Must be unique if set
+        args: 
+            required: false
+            unique: true
+            maxLength: 10
+            filter: trim
+
+    # Role Information
+    roleCategory:
+        name: Role Category
+        desc: e.g. Staff
+        args: 
+            required: true
+            options: [Staff]
+            default: Staff
+            filter: trim
+
+    # Additional Information
+    initials:
+        name: Initials
+        desc: Used for timetabling
+        args: 
+            required: false
+            maxLength: 4
+            filter: trim
+
+    dateStart:
+        name: Start Date
+        desc: Format YYYY-MM-DD
+        args: 
+            required: false
+            format: date
+            filter: trim
+
+    dateEnd:
+        name: End Date
+        desc: Format YYYY-MM-DD
+        args: 
+            required: false
+            format: date
+            filter: trim
+
+    biography:
+        name: Biography
+        desc: Brief staff biography
+        args: 
+            required: false
+            maxLength: 1000
+            filter: trim
+
+    qualifications:
+        name: Qualifications
+        desc: Academic and professional qualifications
+        args: 
+            required: false
+            maxLength: 255
+            filter: trim
+
+    fields:
+        name: Custom Fields
+        desc: Additional custom field data
+        args: 
+            required: false
+            maxLength: 255
+            filter: trim
+
+    gibbonDepartmentID:
+        name: Department
+        desc: Staff member's department
+        args: 
+            required: false
+            maxLength: 255
+            filter: trim
+
+    gibbonHouseID:
+        name: House
+        desc: Staff member's assigned house
+        args: 
+            required: false
+            maxLength: 255
+            filter: trim
