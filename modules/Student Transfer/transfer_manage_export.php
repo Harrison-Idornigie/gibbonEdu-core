@@ -26,8 +26,9 @@ require_once __DIR__ . '/moduleFunctions.php';
 // Get global container and required services
 global $container;
 
-// Get database connection
-$pdo = $container->get('db')->getConnection();
+// Get database connections
+$connection2 = $container->get('db')->getConnection();
+$db = $container->get('db');
 
 if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_manage_export.php') == false) {
     // Access denied
@@ -38,9 +39,9 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
 
     // Get transfer gateway from container
     $transferGateway = $container->get(TransferGateway::class);
-
+    
     // Validate the transfer ID
-    $transfer = $transferGateway->getTransferByID($gibbonStudentTransferLogID);
+    $transfer = $transferGateway->getByID($gibbonStudentTransferLogID);
 
     if (empty($transfer)) {
         $page->addError(__('The specified record cannot be found.'));
@@ -69,24 +70,22 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
                 
                 // Initialize services
                 $settingGateway = $container->get(SettingGateway::class);
-                $securityService = new SecurityService($connection2, $settingGateway);
+                $securityService = new SecurityService($db, $settingGateway);
                 
-                // Verify system install key exists
-                if (empty($settingGateway->getSettingByScope('System', 'installKey'))) {
-                    throw new \RuntimeException('System install key is not set. Please check system settings.');
-                }
+                // Verify module encryption key exists (handled by SecurityService constructor)
+                // The SecurityService will automatically generate a key if none exists
 
-                // Initialize remaining services
-                $studentGateway = new StudentGateway($pdo);
-                $facilityGateway = new FacilityGateway($pdo);
-                $userGateway = new UserGateway($pdo);
-                $customFieldGateway = new CustomFieldGateway($pdo);
-                $medicalGateway = new MedicalGateway($pdo);
-                $firstAidGateway = new FirstAidGateway($pdo);
+                // Initialize remaining services using container
+                $studentGateway = $container->get(StudentGateway::class);
+                $facilityGateway = $container->get(FacilityGateway::class);
+                $userGateway = $container->get(UserGateway::class);
+                $customFieldGateway = $container->get(CustomFieldGateway::class);
+                $medicalGateway = $container->get(MedicalGateway::class);
+                $firstAidGateway = $container->get(FirstAidGateway::class);
 
                 // Initialize StudentExporter with dependencies
                 $studentExporter = new StudentExporter(
-                    $pdo,
+                    $db,
                     $settingGateway,
                     $studentGateway,
                     $facilityGateway,

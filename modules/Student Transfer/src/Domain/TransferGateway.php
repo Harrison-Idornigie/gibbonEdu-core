@@ -60,20 +60,33 @@ class TransferGateway extends QueryableGateway
      */
     public function queryTransfers(QueryCriteria $criteria, $gibbonSchoolYearID = null): DataSet
     {
+        // Check which timestamp columns exist
+        $hasTimestampCreated = $this->tableHasColumns($this->getTableName(), ['timestampCreated']);
+        $hasExportTimestamp = $this->tableHasColumns($this->getTableName(), ['exportTimestamp']);
+
+        $cols = [
+            'gibbonStudentTransferLogID',
+            $this->getTableName().'.status',
+            'schoolNameFrom',
+            'schoolNameTo',
+            'gibbonPerson.surname',
+            'gibbonPerson.preferredName',
+            'gibbonPerson.username',
+            'gibbonYearGroup.nameShort as yearGroup'
+        ];
+
+        // Only include timestamp columns if they exist
+        if ($hasExportTimestamp) {
+            $cols[] = 'exportTimestamp';
+        }
+        if ($hasTimestampCreated) {
+            $cols[] = 'timestampCreated';
+        }
+
         $query = $this
             ->newQuery()
             ->from($this->getTableName())
-            ->cols([
-                'gibbonStudentTransferLogID',
-                'timestampCreated',
-                $this->getTableName().'.status',
-                'schoolNameFrom',
-                'schoolNameTo',
-                'gibbonPerson.surname',
-                'gibbonPerson.preferredName',
-                'gibbonPerson.username',
-                'gibbonYearGroup.nameShort as yearGroup'
-            ])
+            ->cols($cols)
             ->innerJoin('gibbonPerson', 'gibbonPerson.gibbonPersonID=gibbonStudentTransferLog.gibbonPersonID')
             ->innerJoin('gibbonStudentEnrolment', 'gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID')
             ->innerJoin('gibbonYearGroup', 'gibbonYearGroup.gibbonYearGroupID=gibbonStudentEnrolment.gibbonYearGroupID');
@@ -83,12 +96,54 @@ class TransferGateway extends QueryableGateway
                   ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID);
         }
 
+        // Add filter rules
         $criteria->addFilterRules([
             'status' => function($query, $status) {
                 return $query->where($this->getTableName().'.status = :status')
                            ->bindValue('status', $status);
             }
         ]);
+
+        // Handle sorting based on available columns
+        if (!$criteria->hasSort()) {
+            if ($hasExportTimestamp) {
+                $criteria->sortBy('exportTimestamp', 'DESC');
+            } elseif ($hasTimestampCreated) {
+                $criteria->sortBy('timestampCreated', 'DESC');
+            }
+            $criteria->sortBy('status');
+        } else {
+            // Get current sorts and validate them
+            $sorts = $criteria->getSortBy();
+            $validSorts = [];
+            
+            foreach ($sorts as $column => $direction) {
+                // Only allow sorting by timestamp columns if they exist
+                if ($column == 'timestampCreated' && !$hasTimestampCreated) {
+                    continue;
+                }
+                if ($column == 'exportTimestamp' && !$hasExportTimestamp) {
+                    continue;
+                }
+                
+                // Add other valid columns
+                if (in_array($column, ['status', 'schoolNameFrom', 'schoolNameTo', 'surname', 'preferredName', 'yearGroup'])) {
+                    $validSorts[$column] = $direction;
+                }
+            }
+            
+            // If no valid sorts, use default sorting
+            if (empty($validSorts)) {
+                $criteria->sortBy('status');
+            } else {
+                // Remove invalid sorts
+                foreach ($sorts as $column => $direction) {
+                    if (!isset($validSorts[$column])) {
+                        $criteria->removeSort($column);
+                    }
+                }
+            }
+        }
 
         return $this->runQuery($query, $criteria);
     }

@@ -122,14 +122,24 @@ $table->addColumn('schoolTo', __('To School'))
         return $row['schoolNameTo'];
     });
 
+// Get available columns for sorting
+$hasTimestampCreated = $transferGateway->tableHasColumns('gibbonStudentTransferLog', ['timestampCreated']);
+$hasExportTimestamp = $transferGateway->tableHasColumns('gibbonStudentTransferLog', ['exportTimestamp']);
+
 $table->addColumn('timestampCreated', __('Created'))
-    ->sortable(['timestampCreated'])
+    ->sortable($hasTimestampCreated ? ['timestampCreated'] : [])
     ->format(function ($row) {
-        $output = Format::dateTime($row['timestampCreated']);
-        if (!empty($row['timestampModified'])) {
-            $output .= "<br/><small><i>" . __('Modified') . ": " . Format::dateTime($row['timestampModified']) . "</i></small>";
-        }
-        return $output;
+        return !empty($row['timestampCreated']) 
+            ? Format::dateTime($row['timestampCreated']) 
+            : '';
+    });
+
+$table->addColumn('exportTimestamp', __('Exported'))
+    ->sortable($hasExportTimestamp ? ['exportTimestamp'] : [])
+    ->format(function ($row) {
+        return !empty($row['exportTimestamp']) 
+            ? Format::dateTime($row['exportTimestamp']) 
+            : '';
     });
 
 $table->addColumn('status', __('Status'))

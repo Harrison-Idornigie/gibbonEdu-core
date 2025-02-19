@@ -538,12 +538,11 @@ class StudentExporter
     {
         $behavior = [];
 
-        $sql = "SELECT b.type, b.descriptor, b.level, b.comment,
-                       b.followup, b.timestamp, b.timestampCreated
+        $sql = "SELECT b.*
                 FROM gibbonBehaviour AS b
                 WHERE b.gibbonPersonID=:studentID
                 AND b.gibbonSchoolYearID=:gibbonSchoolYearID
-                ORDER BY b.timestampCreated DESC";
+                ORDER BY b.timestamp DESC";
 
         $result = $this->connection->select($sql, [
             'studentID' => $studentID,
