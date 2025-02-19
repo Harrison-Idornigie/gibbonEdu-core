@@ -352,7 +352,7 @@ class StudentExporter
 
         // Get first aid records using criteria
         $criteria = $this->firstAidGateway->newQueryCriteria()
-            ->sortBy('timestampCreated', 'DESC')
+            ->sortBy('gibbonFirstAid.timestamp', 'DESC')
             ->fromPOST();
         
         $firstAidRecords = $this->firstAidGateway->queryFirstAidByStudent($criteria, $this->session->get('gibbonSchoolYearID'), $studentID);
@@ -430,21 +430,23 @@ class StudentExporter
     {
         $customFields = [];
 
-        $sql = "SELECT f.name, f.type, v.value
-                FROM gibbonCustomField AS f
-                JOIN gibbonPersonField AS v ON (v.gibbonCustomFieldID=f.gibbonCustomFieldID)
-                WHERE v.gibbonPersonID=:studentID
-                AND f.active='Y'";
+        // Get custom field definitions
+        $fields = $this->customFieldGateway->selectCustomFields('Person', [
+            'student' => 1,
+            'active' => 'Y'
+        ])->fetchAll();
 
-        $fields = $this->connection->select($sql, ['studentID' => $studentID]);
+        // Get person record with custom field values
+        $sql = "SELECT fields FROM gibbonPerson WHERE gibbonPersonID=:studentID";
+        $result = $this->connection->selectOne($sql, ['studentID' => $studentID]);
+        $fieldValues = !empty($result['fields']) ? json_decode($result['fields'], true) : [];
 
-        if (!empty($fields)) {
-            foreach ($fields as $field) {
-                $customFields[$field['name']] = [
-                    'type' => $field['type'] ?? '',
-                    'value' => $field['value'] ?? ''
-                ];
-            }
+        // Match field definitions with values
+        foreach ($fields as $field) {
+            $customFields[$field['name']] = [
+                'type' => $field['type'] ?? '',
+                'value' => $fieldValues[$field['gibbonCustomFieldID']] ?? ''
+            ];
         }
 
         return $customFields;
@@ -460,19 +462,22 @@ class StudentExporter
     {
         $attachments = [];
 
-        $sql = "SELECT DISTINCT f.gibbonFileUploadID, f.name, f.type, f.path
-                FROM gibbonFileUpload AS f
-                WHERE f.gibbonPersonID=:studentID";
+        // Get any existing attachments from the transfer log
+        $sql = "SELECT a.name, a.type, a.path, a.size
+                FROM gibbonStudentTransferAttachment AS a 
+                JOIN gibbonStudentTransferLog AS l ON (l.gibbonStudentTransferLogID=a.gibbonStudentTransferLogID)
+                WHERE l.gibbonPersonID=:studentID
+                AND l.status='Pending'";
 
-        $files = $this->connection->select($sql, ['studentID' => $studentID]);
+        $result = $this->connection->select($sql, ['studentID' => $studentID]);
 
-        if (!empty($files)) {
-            foreach ($files as $file) {
+        if (!empty($result)) {
+            foreach ($result as $file) {
                 $attachments[] = [
-                    'id' => $file['gibbonFileUploadID'] ?? '',
                     'name' => $file['name'] ?? '',
                     'type' => $file['type'] ?? '',
-                    'path' => $file['path'] ?? ''
+                    'path' => $file['path'] ?? '',
+                    'size' => $file['size'] ?? 0
                 ];
             }
         }
@@ -491,16 +496,21 @@ class StudentExporter
         $grades = [];
 
         $sql = "SELECT c.name as courseName, c.nameShort as courseNameShort, 
-                       g.name as gradeName, g.comment, g.timestampCreated,
-                       s.name as scaleGrade, s.value as scaleValue
+                       mc.name as gradeName, me.comment, me.attainmentValue,
+                       me.attainmentDescriptor, mc.date as gradeDate,
+                       sg.descriptor as scaleGrade, sg.value as scaleValue
                 FROM gibbonCourseClassPerson AS p
                 JOIN gibbonCourseClass AS cc ON (cc.gibbonCourseClassID=p.gibbonCourseClassID)
                 JOIN gibbonCourse AS c ON (c.gibbonCourseID=cc.gibbonCourseID)
-                JOIN gibbonMarkbookEntry AS g ON (g.gibbonCourseClassID=cc.gibbonCourseClassID)
-                LEFT JOIN gibbonScaleGrade AS s ON (s.value=g.attainmentValue)
+                JOIN gibbonMarkbookColumn AS mc ON (mc.gibbonCourseClassID=cc.gibbonCourseClassID)
+                JOIN gibbonMarkbookEntry AS me ON (me.gibbonMarkbookColumnID=mc.gibbonMarkbookColumnID 
+                    AND me.gibbonPersonIDStudent=p.gibbonPersonID)
+                LEFT JOIN gibbonScale AS s ON (s.gibbonScaleID=mc.gibbonScaleIDAttainment)
+                LEFT JOIN gibbonScaleGrade AS sg ON (sg.gibbonScaleID=s.gibbonScaleID 
+                    AND sg.value=me.attainmentValue)
                 WHERE p.gibbonPersonID=:studentID
-                AND g.gibbonSchoolYearID=:gibbonSchoolYearID
-                ORDER BY g.timestampCreated DESC";
+                AND c.gibbonSchoolYearID=:gibbonSchoolYearID
+                ORDER BY mc.date DESC";
 
         $result = $this->connection->select($sql, [
             'studentID' => $studentID,
@@ -517,9 +527,9 @@ class StudentExporter
                     'grade' => [
                         'name' => $grade['gradeName'],
                         'comment' => $grade['comment'],
-                        'value' => $grade['scaleValue'],
-                        'description' => $grade['scaleGrade'],
-                        'date' => $grade['timestampCreated']
+                        'value' => $grade['attainmentValue'],
+                        'description' => $grade['attainmentDescriptor'] ?? $grade['scaleGrade'],
+                        'date' => $grade['gradeDate']
                     ]
                 ];
             }
@@ -567,7 +577,7 @@ class StudentExporter
     }
 
     /**
-     * Export attendance records.
+     * Export attendance data.
      *
      * @param string $studentID
      * @return array
@@ -576,12 +586,15 @@ class StudentExporter
     {
         $attendance = [];
 
-        $sql = "SELECT a.date, a.type, a.reason, a.comment,
-                       a.timestampTaken, a.context
+        $sql = "SELECT a.date, a.direction, a.type, a.reason, a.context, a.comment,
+                       ac.name as codeName, ac.nameShort as codeNameShort,
+                       ac.direction as codeDirection, ac.scope as codeScope
                 FROM gibbonAttendanceLogPerson AS a
+                LEFT JOIN gibbonAttendanceCode AS ac ON (ac.gibbonAttendanceCodeID=a.gibbonAttendanceCodeID)
+                JOIN gibbonSchoolYear AS sy ON (sy.gibbonSchoolYearID=:gibbonSchoolYearID)
                 WHERE a.gibbonPersonID=:studentID
-                AND a.gibbonSchoolYearID=:gibbonSchoolYearID
-                ORDER BY a.date DESC";
+                AND a.date BETWEEN sy.firstDay AND sy.lastDay
+                ORDER BY a.date DESC, a.timestampTaken DESC";
 
         $result = $this->connection->select($sql, [
             'studentID' => $studentID,
@@ -592,11 +605,17 @@ class StudentExporter
             foreach ($result as $record) {
                 $attendance[] = [
                     'date' => $record['date'],
+                    'direction' => $record['direction'],
                     'type' => $record['type'],
                     'reason' => $record['reason'],
-                    'comment' => $record['comment'],
                     'context' => $record['context'],
-                    'taken' => $record['timestampTaken']
+                    'comment' => $record['comment'],
+                    'code' => [
+                        'name' => $record['codeName'],
+                        'nameShort' => $record['codeNameShort'],
+                        'direction' => $record['codeDirection'],
+                        'scope' => $record['codeScope']
+                    ]
                 ];
             }
         }

@@ -99,25 +99,25 @@ if ($session->get('isAdmin') && $settingGateway->getSettingByScope('Student Tran
 
 // Add columns
 $table->addColumn('student', __('Student'))
-    ->sortable(['surname', 'preferredName'])
+    ->sortable(['gibbonPerson.surname', 'gibbonPerson.preferredName'])
     ->format(function ($row) {
         return Format::name('', $row['preferredName'], $row['surname'], 'Student', true, true);
     });
 
 $table->addColumn('yearGroup', __('Year Group'))
-    ->sortable(['yearGroup'])
+    ->sortable(['gibbonYearGroup.nameShort'])
     ->format(function ($row) {
         return $row['yearGroup'];
     });
 
 $table->addColumn('schoolFrom', __('From School'))
-    ->sortable(['schoolNameFrom'])
+    ->sortable(['gibbonStudentTransferLog.schoolNameFrom'])
     ->format(function ($row) {
         return $row['schoolNameFrom'];
     });
 
 $table->addColumn('schoolTo', __('To School'))
-    ->sortable(['schoolNameTo'])
+    ->sortable(['gibbonStudentTransferLog.schoolNameTo'])
     ->format(function ($row) {
         return $row['schoolNameTo'];
     });
@@ -127,7 +127,7 @@ $hasTimestampCreated = $transferGateway->tableHasColumns('gibbonStudentTransferL
 $hasExportTimestamp = $transferGateway->tableHasColumns('gibbonStudentTransferLog', ['exportTimestamp']);
 
 $table->addColumn('timestampCreated', __('Created'))
-    ->sortable($hasTimestampCreated ? ['timestampCreated'] : [])
+    ->sortable($hasTimestampCreated ? ['gibbonStudentTransferLog.timestampCreated'] : [])
     ->format(function ($row) {
         return !empty($row['timestampCreated']) 
             ? Format::dateTime($row['timestampCreated']) 
@@ -135,7 +135,7 @@ $table->addColumn('timestampCreated', __('Created'))
     });
 
 $table->addColumn('exportTimestamp', __('Exported'))
-    ->sortable($hasExportTimestamp ? ['exportTimestamp'] : [])
+    ->sortable($hasExportTimestamp ? ['gibbonStudentTransferLog.exportTimestamp'] : [])
     ->format(function ($row) {
         return !empty($row['exportTimestamp']) 
             ? Format::dateTime($row['exportTimestamp']) 
@@ -143,7 +143,7 @@ $table->addColumn('exportTimestamp', __('Exported'))
     });
 
 $table->addColumn('status', __('Status'))
-    ->sortable(['status'])
+    ->sortable(['gibbonStudentTransferLog.status'])
     ->format(function ($row) {
         $statusClasses = [
             'Pending' => 'message',
@@ -191,7 +191,7 @@ $table->addActionColumn()
 // Query transfers
 $criteria = $transferGateway->newQueryCriteria()
     ->searchBy($transferGateway->getSearchableColumns(), $search)
-    ->sortBy('timestampCreated', 'DESC')
+    ->sortBy('gibbonStudentTransferLog.timestampCreated', 'DESC')
     ->fromPOST();
 
 $transfers = $transferGateway->queryTransfers($criteria, $gibbonSchoolYearID);

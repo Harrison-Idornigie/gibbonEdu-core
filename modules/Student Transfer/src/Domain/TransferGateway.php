@@ -52,23 +52,24 @@ class TransferGateway extends QueryableGateway
         $this->connection = $db;
     }
 
-    /**
-     * Queries all transfers with detailed information
-     * @param QueryCriteria $criteria Query criteria for filtering and sorting
-     * @param int|null $gibbonSchoolYearID Optional school year ID filter
-     * @return DataSet
-     */
-    public function queryTransfers(QueryCriteria $criteria, $gibbonSchoolYearID = null): DataSet
-    {
+  /**
+ * Queries all transfers with detailed information
+ * @param QueryCriteria $criteria Query criteria for filtering and sorting 
+ * @param int|null $gibbonSchoolYearID Optional school year ID filter
+ * @return DataSet
+ */
+public function queryTransfers(QueryCriteria $criteria, $gibbonSchoolYearID = null): DataSet
+{
+    try {
         // Check which timestamp columns exist
         $hasTimestampCreated = $this->tableHasColumns($this->getTableName(), ['timestampCreated']);
         $hasExportTimestamp = $this->tableHasColumns($this->getTableName(), ['exportTimestamp']);
 
         $cols = [
-            'gibbonStudentTransferLogID',
+            $this->getTableName().'.gibbonStudentTransferLogID',
             $this->getTableName().'.status',
-            'schoolNameFrom',
-            'schoolNameTo',
+            $this->getTableName().'.schoolNameFrom',
+            $this->getTableName().'.schoolNameTo', 
             'gibbonPerson.surname',
             'gibbonPerson.preferredName',
             'gibbonPerson.username',
@@ -77,17 +78,17 @@ class TransferGateway extends QueryableGateway
 
         // Only include timestamp columns if they exist
         if ($hasExportTimestamp) {
-            $cols[] = 'exportTimestamp';
+            $cols[] = $this->getTableName().'.exportTimestamp';
         }
         if ($hasTimestampCreated) {
-            $cols[] = 'timestampCreated';
+            $cols[] = $this->getTableName().'.timestampCreated';
         }
 
         $query = $this
             ->newQuery()
             ->from($this->getTableName())
             ->cols($cols)
-            ->innerJoin('gibbonPerson', 'gibbonPerson.gibbonPersonID=gibbonStudentTransferLog.gibbonPersonID')
+            ->innerJoin('gibbonPerson', 'gibbonPerson.gibbonPersonID='.$this->getTableName().'.gibbonPersonID')
             ->innerJoin('gibbonStudentEnrolment', 'gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID')
             ->innerJoin('gibbonYearGroup', 'gibbonYearGroup.gibbonYearGroupID=gibbonStudentEnrolment.gibbonYearGroupID');
 
@@ -96,57 +97,51 @@ class TransferGateway extends QueryableGateway
                   ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID);
         }
 
-        // Add filter rules
-        $criteria->addFilterRules([
-            'status' => function($query, $status) {
-                return $query->where($this->getTableName().'.status = :status')
-                           ->bindValue('status', $status);
-            }
-        ]);
-
         // Handle sorting based on available columns
         if (!$criteria->hasSort()) {
-            if ($hasExportTimestamp) {
-                $criteria->sortBy('exportTimestamp', 'DESC');
-            } elseif ($hasTimestampCreated) {
-                $criteria->sortBy('timestampCreated', 'DESC');
-            }
-            $criteria->sortBy('status');
+            // Default sorting
+            $criteria->sortBy($this->getTableName().'.status');
         } else {
-            // Get current sorts and validate them
             $sorts = $criteria->getSortBy();
             $validSorts = [];
             
             foreach ($sorts as $column => $direction) {
-                // Only allow sorting by timestamp columns if they exist
-                if ($column == 'timestampCreated' && !$hasTimestampCreated) {
-                    continue;
-                }
-                if ($column == 'exportTimestamp' && !$hasExportTimestamp) {
+                // Skip timestamp columns if they don't exist
+                if (($column == 'timestampCreated' && !$hasTimestampCreated) ||
+                    ($column == 'exportTimestamp' && !$hasExportTimestamp)) {
                     continue;
                 }
                 
-                // Add other valid columns
-                if (in_array($column, ['status', 'schoolNameFrom', 'schoolNameTo', 'surname', 'preferredName', 'yearGroup'])) {
-                    $validSorts[$column] = $direction;
+                // Add valid sort columns with proper table qualification
+                if (in_array($column, ['status', 'schoolNameFrom', 'schoolNameTo'])) {
+                    $validSorts[$this->getTableName().'.'.$column] = $direction;
+                } elseif (in_array($column, ['surname', 'preferredName'])) {
+                    $validSorts['gibbonPerson.'.$column] = $direction;
+                } elseif ($column == 'yearGroup') {
+                    $validSorts['gibbonYearGroup.nameShort'] = $direction;
+                } elseif (($column == 'timestampCreated' && $hasTimestampCreated) ||
+                         ($column == 'exportTimestamp' && $hasExportTimestamp)) {
+                    $validSorts[$this->getTableName().'.'.$column] = $direction;
                 }
             }
             
-            // If no valid sorts, use default sorting
-            if (empty($validSorts)) {
-                $criteria->sortBy('status');
-            } else {
-                // Remove invalid sorts
-                foreach ($sorts as $column => $direction) {
-                    if (!isset($validSorts[$column])) {
-                        $criteria->removeSort($column);
-                    }
+            // Apply valid sorts
+            if (!empty($validSorts)) {
+                foreach ($validSorts as $column => $direction) {
+                    $criteria->sortBy($column, $direction);
                 }
+            } else {
+                $criteria->sortBy($this->getTableName().'.status');
             }
         }
 
         return $this->runQuery($query, $criteria);
+    } catch (\PDOException $e) {
+        // Log error but return empty dataset
+        error_log($e->getMessage());
+        return new DataSet([]);
     }
+}
 
     /**
      * Gets transfer data by type
