@@ -31,12 +31,29 @@ class SecurityService
      * Create a new SecurityService instance.
      *
      * @param Connection $pdo
+     * @param SettingGateway $settingGateway
      */
-    public function __construct(Connection $pdo)
+    public function __construct(Connection $pdo, SettingGateway $settingGateway)
     {
         $this->pdo = $pdo;
-        $settingGateway = new SettingGateway($pdo);
-        $this->secretKey = $settingGateway->getSettingByScope('System', 'installKey');
+        $this->secretKey = $settingGateway->getSettingByScope('Student Transfer', 'encryptionKey');
+        
+        // If no key exists, generate one and save it
+        if (empty($this->secretKey)) {
+            $this->secretKey = $this->generateSecureKey();
+            $settingGateway->updateSettingByScope('Student Transfer', 'encryptionKey', $this->secretKey);
+        }
+    }
+
+    /**
+     * Generate a secure random key for encryption and signing.
+     * 
+     * @param int $length Length of the key in bytes (default: 32 for 256 bits)
+     * @return string The generated key in hexadecimal format
+     */
+    public function generateSecureKey($length = 32)
+    {
+        return bin2hex(random_bytes($length));
     }
 
     /**
@@ -45,12 +62,12 @@ class SecurityService
      *
      * @param string $filePath Path to the file to sign
      * @return string The digital signature
-     * @throws \RuntimeException If file cannot be read or secret key is not set
+     * @throws \RuntimeException If file cannot be read or encryption key is not set
      */
     public function createDigitalSignature($filePath)
     {
         if (empty($this->secretKey)) {
-            throw new \RuntimeException('System install key not found. Please check system settings.');
+            throw new \RuntimeException('Transfer encryption key is not set. Please check module settings.');
         }
 
         if (!file_exists($filePath) || !is_readable($filePath)) {

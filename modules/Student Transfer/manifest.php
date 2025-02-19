@@ -144,6 +144,10 @@ $gibbonSetting = [
     
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
     VALUES 
+    ('Student Transfer', 'encryptionKey', 'Encryption Key', 'Secure key used for encrypting and signing transfer packages.', '')",
+    
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
     ('Student Transfer', 'transferPrivateKey', 'Transfer Private Key', 'Private key for signing transfer packages.', '')",
     
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
@@ -177,8 +181,8 @@ $actionRows = [
         'precedence' => '1',
         'category' => 'Admin',
         'description' => 'Manage Student Transfer module settings.',
-        'URLList' => 'settings_manage.php',
-        'entryURL' => 'settings_manage.php',
+        'URLList' => 'transfer_settings_manage.php',
+        'entryURL' => 'transfer_settings_manage.php',
         'entrySidebar' => 'Y',
         'menuShow' => 'Y',
         'defaultPermissionAdmin' => 'Y',

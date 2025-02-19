@@ -27,10 +27,9 @@ require_once __DIR__ . '/moduleFunctions.php';
 global $container;
 
 // Get database connection
-$connection = $container->get('db');
-$pdo = $connection->getConnection();
+$pdo = $container->get('db')->getConnection();
 
-if (isActionAccessible($guid, $pdo, '/modules/Student Transfer/transfer_manage_export.php') == false) {
+if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_manage_export.php') == false) {
     // Access denied
     $page->addError(__('You do not have access to this action.'));
 } else {
@@ -68,9 +67,9 @@ if (isActionAccessible($guid, $pdo, '/modules/Student Transfer/transfer_manage_e
                 // Get student ID from transfer record
                 $studentID = $transfer['gibbonPersonID'];
                 
-                // Initialize required services
-                $securityService = new SecurityService($connection);
-                $settingGateway = new SettingGateway($connection);
+                // Initialize services
+                $settingGateway = $container->get(SettingGateway::class);
+                $securityService = new SecurityService($connection2, $settingGateway);
                 
                 // Verify system install key exists
                 if (empty($settingGateway->getSettingByScope('System', 'installKey'))) {
@@ -78,16 +77,16 @@ if (isActionAccessible($guid, $pdo, '/modules/Student Transfer/transfer_manage_e
                 }
 
                 // Initialize remaining services
-                $studentGateway = new StudentGateway($connection);
-                $facilityGateway = new FacilityGateway($connection);
-                $userGateway = new UserGateway($connection);
-                $customFieldGateway = new CustomFieldGateway($connection);
-                $medicalGateway = new MedicalGateway($connection);
-                $firstAidGateway = new FirstAidGateway($connection);
+                $studentGateway = new StudentGateway($pdo);
+                $facilityGateway = new FacilityGateway($pdo);
+                $userGateway = new UserGateway($pdo);
+                $customFieldGateway = new CustomFieldGateway($pdo);
+                $medicalGateway = new MedicalGateway($pdo);
+                $firstAidGateway = new FirstAidGateway($pdo);
 
                 // Initialize StudentExporter with dependencies
                 $studentExporter = new StudentExporter(
-                    $connection,
+                    $pdo,
                     $settingGateway,
                     $studentGateway,
                     $facilityGateway,
@@ -165,9 +164,26 @@ if (isActionAccessible($guid, $pdo, '/modules/Student Transfer/transfer_manage_e
                     unlink($zipFile);
                 }
                 if (isset($tempDir) && file_exists($tempDir)) {
-                    $this->cleanupTempDir($tempDir);
+                    cleanupTempDir($tempDir);
                 }
             }
         }
     }
+}
+
+/**
+ * Recursively remove a directory and its contents
+ * @param string $dir Directory path to remove
+ */
+function cleanupTempDir($dir) {
+    if (!is_dir($dir)) {
+        return;
+    }
+    
+    $files = array_diff(scandir($dir), array('.', '..'));
+    foreach ($files as $file) {
+        $path = $dir . DIRECTORY_SEPARATOR . $file;
+        is_dir($path) ? cleanupTempDir($path) : unlink($path);
+    }
+    return rmdir($dir);
 }
