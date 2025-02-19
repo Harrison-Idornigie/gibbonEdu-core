@@ -9,199 +9,128 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 namespace Gibbon\Module\StudentTransfer\Domain;
 
 use Gibbon\Domain\System\SettingGateway;
-use Gibbon\Contracts\Database\Connection;
-use Firebase\JWT\JWT;
 
 /**
  * Security Service
  *
- * Handles encryption, decryption, and secure file operations for student transfers
+ * Handles secure file operations for student transfers including:
+ * - Digital signatures for file authenticity
+ * - Secure password generation for ZIP files
+ * - File integrity verification
  *
  * @version v1.0.00
  * @since   v1.0.00
  */
 class SecurityService
 {
-    protected $pdo;
-    protected $settingGateway;
-    private $privateKey;
-    private $publicKey;
+    private $settingGateway;
+    private $secretKey;
 
-    public function __construct(Connection $pdo, SettingGateway $settingGateway)
+    /**
+     * Create a new SecurityService instance.
+     *
+     * @param SettingGateway $settingGateway
+     */
+    public function __construct(SettingGateway $settingGateway)
     {
-        $this->pdo = $pdo;
         $this->settingGateway = $settingGateway;
-        
-        // Initialize keys from settings
-        $this->privateKey = $this->settingGateway->getSettingByScope('System Admin', 'transferPrivateKey');
-        $this->publicKey = $this->settingGateway->getSettingByScope('System Admin', 'transferPublicKey');
+        $this->secretKey = $this->settingGateway->getSettingByScope('System', 'installKey');
     }
 
     /**
-     * Create a digital signature for a file.
+     * Create digital signature for a file using HMAC-SHA256.
+     * This provides cryptographic verification of file authenticity and integrity.
      *
-     * @param string $filePath
-     * @return string
+     * @param string $filePath Path to the file to sign
+     * @return string The digital signature
      */
-    public function signFile($filePath)
+    public function createDigitalSignature($filePath)
     {
-        if (!file_exists($filePath)) {
-            throw new \InvalidArgumentException('File not found: ' . $filePath);
-        }
-
         $content = file_get_contents($filePath);
-        $hash = hash('sha256', $content);
-        
-        // Sign the hash with the private key
-        openssl_sign($hash, $signature, $this->privateKey, OPENSSL_ALGO_SHA256);
-        
-        return base64_encode($signature);
+        return hash_hmac('sha256', $content, $this->secretKey);
     }
 
     /**
-     * Verify a file's digital signature.
+     * Generate a secure random password for ZIP encryption.
+     * Uses cryptographically secure random number generator.
      *
-     * @param string $filePath
-     * @param string $signature
-     * @return bool
+     * @param int $length Length of the password (default: 16)
+     * @return string The generated password
      */
-    public function verifySignature($filePath, $signature)
+    public function generateSecurePassword($length = 16)
     {
-        if (!file_exists($filePath)) {
-            throw new \InvalidArgumentException('File not found: ' . $filePath);
+        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
+        $password = '';
+        
+        for ($i = 0; $i < $length; $i++) {
+            $password .= $chars[random_int(0, strlen($chars) - 1)];
         }
-
-        $content = file_get_contents($filePath);
-        $hash = hash('sha256', $content);
-        $decodedSignature = base64_decode($signature);
         
-        return openssl_verify($hash, $decodedSignature, $this->publicKey, OPENSSL_ALGO_SHA256) === 1;
+        return $password;
     }
 
     /**
-     * Create a secure download link for a transfer package.
+     * Verify a digital signature for a file.
+     * Used during import to verify file authenticity and integrity.
      *
-     * @param string $transferID
-     * @return array Download information including URL and expiry
+     * @param string $filePath Path to the file to verify
+     * @param string $signature The digital signature to verify against
+     * @return bool True if signature is valid, false otherwise
      */
-    public function createSecureDownloadLink($transferID)
+    public function verifyDigitalSignature($filePath, $signature)
     {
-        // Generate a secure token
-        $token = bin2hex(random_bytes(32));
-        $expiry = date('Y-m-d H:i:s', strtotime('+24 hours'));
-        
-        // Store the token
-        $sql = "INSERT INTO gibbonStudentTransferToken SET 
-                transferID=:transferID, 
-                token=:token, 
-                expiry=:expiry";
-                
-        $this->pdo->insert($sql, [
-            'transferID' => $transferID,
-            'token' => password_hash($token, PASSWORD_DEFAULT),
-            'expiry' => $expiry
-        ]);
-        
+        $content = file_get_contents($filePath);
+        $expectedSignature = hash_hmac('sha256', $content, $this->secretKey);
+        return hash_equals($expectedSignature, $signature);
+    }
+
+    /**
+     * Generate a secure download token.
+     * Used to create temporary secure download links.
+     *
+     * @param string $transferID The transfer ID
+     * @param int $expiryMinutes Minutes until token expires (default: 60)
+     * @return array Token and expiry timestamp
+     */
+    public function generateDownloadToken($transferID, $expiryMinutes = 60)
+    {
+        $expiry = new \DateTime();
+        $expiry->modify("+{$expiryMinutes} minutes");
+
+        $token = hash_hmac('sha256', 
+            $transferID . $expiry->format('Y-m-d H:i:s'),
+            $this->secretKey
+        );
+
         return [
-            'url' => '/modules/Student Transfer/transfer_download.php?token=' . $token,
             'token' => $token,
-            'expiry' => $expiry
+            'expiry' => $expiry->format('Y-m-d H:i:s')
         ];
     }
 
     /**
-     * Decrypt transfer data from secure storage.
+     * Verify a download token.
+     * Used to validate temporary download links.
      *
-     * @param string $transferData Encrypted transfer data string
-     * @return array Decrypted data
-     * @throws \InvalidArgumentException If no data provided
-     * @throws \RuntimeException If decryption fails
+     * @param string $transferID The transfer ID
+     * @param string $token The token to verify
+     * @param string $expiry The token's expiry timestamp
+     * @return bool True if token is valid and not expired, false otherwise
      */
-    public function decryptTransferData($transferData)
+    public function verifyDownloadToken($transferID, $token, $expiry)
     {
-        if (empty($transferData)) {
-            throw new \InvalidArgumentException('No transfer data provided');
+        $now = new \DateTime();
+        $expiryDate = new \DateTime($expiry);
+
+        if ($now > $expiryDate) {
+            return false;
         }
 
-        try {
-            // Ensure we have a string
-            $transferDataString = is_array($transferData) ? json_encode($transferData) : $transferData;
+        $expectedToken = hash_hmac('sha256',
+            $transferID . $expiry,
+            $this->secretKey
+        );
 
-            // Decrypt using private key
-            $decoded = JWT::decode($transferDataString, $this->privateKey, ['RS256']);
-            return (array) $decoded;
-        } catch (\Exception $e) {
-            throw new \RuntimeException('Failed to decrypt transfer data: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Create a secure ZIP file with password protection.
-     *
-     * @param string $sourceDir Directory to zip
-     * @param string $destinationZip Path for output ZIP
-     * @return bool Success/failure
-     */
-    public function createSecureZip($sourceDir, $destinationZip)
-    {
-        if (!is_dir($sourceDir)) {
-            throw new \InvalidArgumentException('Source directory not found: ' . $sourceDir);
-        }
-
-        $zip = new \ZipArchive();
-        if ($zip->open($destinationZip, \ZipArchive::CREATE | \ZipArchive::OVERWRITE) !== true) {
-            throw new \RuntimeException('Failed to create ZIP file');
-        }
-
-        try {
-            // Generate a strong random password
-            $password = bin2hex(random_bytes(16));
-
-            // Set encryption method to AES-256
-            $zip->setEncryptionName('*', \ZipArchive::EM_AES_256, $password);
-
-            $iterator = new \RecursiveIteratorIterator(
-                new \RecursiveDirectoryIterator($sourceDir, \RecursiveDirectoryIterator::SKIP_DOTS),
-                \RecursiveIteratorIterator::LEAVES_ONLY
-            );
-
-            foreach ($iterator as $file) {
-                if ($file->isFile()) {
-                    $filePath = $file->getRealPath();
-                    $relativePath = substr($filePath, strlen($sourceDir) + 1);
-                    $zip->addFile($filePath, $relativePath);
-                }
-            }
-
-            $zip->close();
-
-            // Store password securely
-            $this->storeTransferPassword($destinationZip, $password);
-
-            return true;
-        } catch (\Exception $e) {
-            if ($zip->numFiles > 0) {
-                $zip->close();
-            }
-            if (file_exists($destinationZip)) {
-                unlink($destinationZip);
-            }
-            throw $e;
-        }
-    }
-
-    /**
-     * Store transfer password securely.
-     *
-     * @param string $zipPath Path to ZIP file
-     * @param string $password Password to store
-     */
-    protected function storeTransferPassword($zipPath, $password)
-    {
-        $sql = "INSERT INTO gibbonStudentTransferPassword SET zipPath=:zipPath, password=:password";
-        $this->pdo->insert($sql, [
-            'zipPath' => $zipPath,
-            'password' => password_hash($password, PASSWORD_DEFAULT)
-        ]);
+        return hash_equals($expectedToken, $token);
     }
 }

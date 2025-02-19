@@ -2,37 +2,147 @@
 /*
 Gibbon: the flexible, open school platform
 Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
-Copyright © 2010, Gibbon Foundation
-Gibbon™, Gibbon Education Ltd. (Hong Kong)
+Copyright 2010, Gibbon Foundation
+Gibbon, Gibbon Education Ltd. (Hong Kong)
 */
 
-use Gibbon\Services\Format;
+use Gibbon\Contracts\Database\Connection;
 use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Services\Format;
 
 /**
- * Gets a list of students eligible for transfer
+ * Student Transfer Module Helper Functions
+ */
+
+/**
+ * Get list of students eligible for transfer
  *
- * @param \PDO $pdo
- * @param string $gibbonSchoolYearID
+ * @param Connection $pdo
+ * @param int $gibbonSchoolYearID
  * @return array
  */
-function getEligibleStudentsForTransfer($pdo, $gibbonSchoolYearID)
+function getEligibleStudentsForTransfer(Connection $pdo, $gibbonSchoolYearID)
 {
-    $data = ['gibbonSchoolYearID' => $gibbonSchoolYearID];
-    $sql = "SELECT gibbonPerson.gibbonPersonID, surname, preferredName, gibbonYearGroup.nameShort as yearGroup, gibbonRollGroup.nameShort as rollGroup 
+    $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, 
+                   gibbonPerson.surname, 
+                   gibbonPerson.preferredName,
+                   gibbonYearGroup.nameShort as yearGroup,
+                   gibbonFormGroup.nameShort as rollGroup 
             FROM gibbonPerson 
-            JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID) 
-            JOIN gibbonYearGroup ON (gibbonStudentEnrolment.gibbonYearGroupID=gibbonYearGroup.gibbonYearGroupID)
-            JOIN gibbonRollGroup ON (gibbonStudentEnrolment.gibbonRollGroupID=gibbonRollGroup.gibbonRollGroupID)
-            WHERE gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID 
-            AND gibbonPerson.status='Full'
-            ORDER BY surname, preferredName";
+            JOIN gibbonStudentEnrolment ON (
+                gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID
+                AND gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID
+            )
+            JOIN gibbonYearGroup ON (
+                gibbonStudentEnrolment.gibbonYearGroupID=gibbonYearGroup.gibbonYearGroupID
+            )
+            JOIN gibbonFormGroup ON (
+                gibbonStudentEnrolment.gibbonFormGroupID=gibbonFormGroup.gibbonFormGroupID
+            )
+            WHERE gibbonPerson.status='Full'
+            ORDER BY gibbonPerson.surname, gibbonPerson.preferredName";
 
-    return $pdo->select($sql, $data);
+    return $pdo->select($sql, ['gibbonSchoolYearID' => $gibbonSchoolYearID])->fetchAll();
 }
 
 /**
- * Validates a student transfer package
+ * Check if required tables exist
+ *
+ * @param \PDO $connection2
+ * @return bool
+ */
+function checkTablesExist($connection2)
+{
+    $tables = [
+        'gibbonStudentTransferLog',
+        'gibbonStudentTransferData',
+        'gibbonStudentTransferAttachment'
+    ];
+
+    foreach ($tables as $table) {
+        try {
+            $sql = "SHOW TABLES LIKE :table";
+            $result = $connection2->prepare($sql);
+            $result->execute(['table' => $table]);
+            
+            if ($result->rowCount() == 0) {
+                return false;
+            }
+        } catch (\PDOException $e) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Check if required columns exist in a table
+ *
+ * @param \PDO $connection2
+ * @param string $table
+ * @param array $columns
+ * @return bool
+ */
+function checkColumnsExist($connection2, $table, $columns)
+{
+    try {
+        $sql = "SHOW COLUMNS FROM `$table`";
+        $result = $connection2->prepare($sql);
+        $result->execute();
+        $existingColumns = array_column($result->fetchAll(), 'Field');
+
+        foreach ($columns as $column) {
+            if (!in_array($column, $existingColumns)) {
+                return false;
+            }
+        }
+
+        return true;
+    } catch (\PDOException $e) {
+        return false;
+    }
+}
+
+/**
+ * Format a transfer status with appropriate color coding
+ *
+ * @param string $status
+ * @return string
+ */
+function formatTransferStatus($status)
+{
+    $colors = [
+        'Pending' => '#FFB500',
+        'Exported' => '#00B0F0',
+        'Imported' => '#85BA4E',
+        'Complete' => '#00A746',
+        'Cancelled' => '#D60000'
+    ];
+
+    $color = isset($colors[$status]) ? $colors[$status] : '#999999';
+    return "<span style='color: $color'>$status</span>";
+}
+
+/**
+ * Check if a student has an active transfer
+ *
+ * @param Connection $pdo
+ * @param int $gibbonPersonID
+ * @return bool
+ */
+function hasActiveTransfer(Connection $pdo, $gibbonPersonID)
+{
+    $sql = "SELECT COUNT(*) FROM gibbonStudentTransferLog 
+            WHERE gibbonPersonID=:gibbonPersonID 
+            AND status IN ('Pending', 'Exported')";
+    
+    $result = $pdo->select($sql, ['gibbonPersonID' => $gibbonPersonID]);
+    return ($result->fetchColumn() > 0);
+}
+
+/**
+ * Validate a transfer package
  *
  * @param string $packagePath
  * @return array
@@ -43,76 +153,17 @@ function validateTransferPackage($packagePath)
     
     // Check if file exists
     if (!file_exists($packagePath)) {
-        $errors[] = __('Transfer package file not found.');
+        $errors[] = 'Package file not found';
         return $errors;
     }
 
-    // Check file structure
-    $zip = new ZipArchive();
-    if ($zip->open($packagePath) !== true) {
-        $errors[] = __('Invalid transfer package format.');
+    // Check file extension
+    if (pathinfo($packagePath, PATHINFO_EXTENSION) !== 'zip') {
+        $errors[] = 'Invalid package format. Must be a ZIP file';
         return $errors;
     }
 
-    // Required files
-    $requiredFiles = ['student_data.json', 'metadata.json', 'manifest.json'];
-    foreach ($requiredFiles as $file) {
-        if ($zip->locateName($file) === false) {
-            $errors[] = sprintf(__('Required file %s is missing.'), $file);
-        }
-    }
+    // Additional validation can be added here
 
-    // Check metadata
-    $metadata = json_decode($zip->getFromName('metadata.json'), true);
-    if (empty($metadata)) {
-        $errors[] = __('Invalid metadata format.');
-    } else {
-        // Validate timestamps
-        if (empty($metadata['exportTimestamp'])) {
-            $errors[] = __('Export timestamp is missing.');
-        }
-        
-        // Validate source school
-        if (empty($metadata['sourceSchool'])) {
-            $errors[] = __('Source school information is missing.');
-        }
-    }
-
-    $zip->close();
     return $errors;
-}
-
-/**
- * Gets transfer status label and class
- *
- * @param string $status
- * @return array
- */
-function getTransferStatusDetails($status)
-{
-    $statuses = [
-        'Pending' => ['label' => __('Pending'), 'class' => 'message'],
-        'Exported' => ['label' => __('Exported'), 'class' => 'success'],
-        'Imported' => ['label' => __('Imported'), 'class' => 'success'],
-        'Cancelled' => ['label' => __('Cancelled'), 'class' => 'error']
-    ];
-
-    return $statuses[$status] ?? ['label' => $status, 'class' => 'default'];
-}
-
-/**
- * Checks if a student is already in a transfer process
- *
- * @param \PDO $pdo
- * @param string $gibbonPersonID
- * @return bool
- */
-function isStudentInTransfer($pdo, $gibbonPersonID)
-{
-    $data = ['gibbonPersonID' => $gibbonPersonID];
-    $sql = "SELECT COUNT(*) FROM gibbonStudentTransferLog 
-            WHERE gibbonPersonID=:gibbonPersonID 
-            AND status IN ('Pending', 'Exported')";
-
-    return $pdo->selectOne($sql, $data) > 0;
 }

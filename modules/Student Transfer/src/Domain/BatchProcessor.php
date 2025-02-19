@@ -8,110 +8,103 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 
 namespace Gibbon\Module\StudentTransfer\Domain;
 
+use Gibbon\Domain\System\NotificationGateway;
 use Gibbon\Domain\Students\StudentGateway;
-use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Domain\User\UserGateway;
+use Gibbon\Domain\School\SettingGateway;
 use Gibbon\Contracts\Database\Connection;
+use Gibbon\Services\Format;
 
 /**
- * Batch Processor
+ * Batch Processor Class
  *
- * Handles batch processing of student transfers
+ * Handles batch processing of student transfers including:
+ * - Export of multiple student records
+ * - Import of multiple transfer packages
+ * - Notification handling
+ * - Status tracking
  *
  * @version v1.0.00
  * @since   v1.0.00
  */
 class BatchProcessor
 {
-    protected $pdo;
-    protected $studentGateway;
-    protected $settingGateway;
+    protected $connection;
+    protected $notificationGateway;
     protected $transferGateway;
-    protected $exportProcessor;
-    protected $importProcessor;
-    protected $notificationService;
+    protected $studentGateway;
+    protected $userGateway;
+    protected $settingGateway;
+    protected $studentExporter;
 
+    /**
+     * Create a new BatchProcessor
+     *
+     * @param Connection $connection
+     * @param NotificationGateway $notificationGateway
+     * @param TransferGateway $transferGateway
+     * @param StudentGateway $studentGateway
+     * @param UserGateway $userGateway
+     * @param SettingGateway $settingGateway
+     * @param StudentExporter $studentExporter
+     */
     public function __construct(
-        Connection $pdo,
-        StudentGateway $studentGateway,
-        SettingGateway $settingGateway,
+        Connection $connection,
+        NotificationGateway $notificationGateway,
         TransferGateway $transferGateway,
-        ExportProcessor $exportProcessor,
-        ImportProcessor $importProcessor,
-        NotificationService $notificationService
+        StudentGateway $studentGateway,
+        UserGateway $userGateway,
+        SettingGateway $settingGateway,
+        StudentExporter $studentExporter
     ) {
-        $this->pdo = $pdo;
-        $this->studentGateway = $studentGateway;
-        $this->settingGateway = $settingGateway;
+        $this->connection = $connection;
+        $this->notificationGateway = $notificationGateway;
         $this->transferGateway = $transferGateway;
-        $this->exportProcessor = $exportProcessor;
-        $this->importProcessor = $importProcessor;
-        $this->notificationService = $notificationService;
+        $this->studentGateway = $studentGateway;
+        $this->userGateway = $userGateway;
+        $this->settingGateway = $settingGateway;
+        $this->studentExporter = $studentExporter;
     }
 
     /**
-     * Process a batch of student transfers.
+     * Process a batch of student transfers for export
      *
-     * @param array $studentIDs Array of student IDs to process
-     * @param array $options Transfer options
-     * @param string $gibbonPersonID Person initiating the batch
-     * @return array Results of batch processing
+     * @param array $studentIDs
+     * @param array $params
+     * @return array
      */
-    public function processBatch($studentIDs, $options, $gibbonPersonID)
+    public function processBatchExport(array $studentIDs, array $params): array
     {
-        if (empty($studentIDs) || !is_array($studentIDs)) {
-            throw new \InvalidArgumentException('No students selected for batch processing');
-        }
-
-        $results = [
-            'success' => [],
-            'failed' => []
-        ];
-
+        $results = [];
+        
         foreach ($studentIDs as $studentID) {
-            try {
-                // Create transfer record
-                $transferID = $this->transferGateway->insert([
-                    'gibbonPersonID' => $studentID,
-                    'gibbonPersonIDCreated' => $gibbonPersonID,
-                    'status' => 'Pending',
-                    'timestampCreated' => date('Y-m-d H:i:s')
-                ]);
+            $data = [
+                'gibbonPersonID' => $studentID,
+                'gibbonSchoolYearID' => $params['gibbonSchoolYearID'],
+                'schoolNameFrom' => $params['schoolNameFrom'],
+                'schoolNameTo' => $params['schoolNameTo'],
+                'status' => 'Pending'
+            ];
 
-                if (!$transferID) {
-                    throw new \RuntimeException('Failed to create transfer record');
-                }
-
-                // Process based on transfer type
-                if ($options['type'] === 'export') {
-                    $result = $this->processExport($studentID, $transferID, $options);
-                    if (!$result) {
-                        throw new \RuntimeException('Export processing failed');
-                    }
-                } elseif ($options['type'] === 'import') {
-                    $result = $this->processImport($studentID, $transferID, $options);
-                    if (!$result) {
-                        throw new \RuntimeException('Import processing failed');
-                    }
-                }
-
-                // Update transfer status
-                $this->transferGateway->update($transferID, [
-                    'status' => 'Complete',
-                    'timestampModified' => date('Y-m-d H:i:s')
-                ]);
-
-                // Send notification
-                $this->notificationService->sendTransferNotification($transferID, $gibbonPersonID);
-
-                $results['success'][] = $studentID;
-            } catch (\Exception $e) {
-                $results['failed'][] = [
-                    'studentID' => $studentID,
-                    'error' => $e->getMessage()
+            $inserted = $this->transferGateway->insert($data);
+            if ($inserted) {
+                $transferID = $this->connection->insertID();
+                $results[$studentID] = [
+                    'success' => true,
+                    'transferID' => $transferID
                 ];
 
-                // Log error
-                error_log('Batch Transfer Error: ' . $e->getMessage());
+                // Send notification
+                $this->notificationGateway->insert([
+                    'title' => 'Student Transfer Created',
+                    'text' => "Transfer #{$transferID} has been created",
+                    'moduleName' => 'Student Transfer'
+                ]);
+            } else {
+                $results[$studentID] = [
+                    'success' => false,
+                    'error' => 'Failed to create transfer record'
+                ];
             }
         }
 
@@ -119,114 +112,342 @@ class BatchProcessor
     }
 
     /**
-     * Process export for a single student.
+     * Process a batch of student transfers for import
      *
-     * @param string $studentID
-     * @param string $transferID
-     * @param array $options
-     * @return bool Success/failure
+     * @param array $transfers
+     * @return array
      */
-    protected function processExport($studentID, $transferID, array $options)
+    public function processBatchImport(array $transfers): array
     {
-        try {
-            // Export student data
-            $result = $this->exportProcessor->processExport($studentID, $transferID, $options);
-            return $result && isset($result['success']) ? $result['success'] : false;
-        } catch (\Exception $e) {
-            error_log('Export Processing Error: ' . $e->getMessage());
-            return false;
+        $results = [];
+
+        foreach ($transfers as $transfer) {
+            $updated = $this->transferGateway->update($transfer['transferID'], [
+                'status' => 'Imported',
+                'importTimestamp' => date('Y-m-d H:i:s')
+            ]);
+
+            if ($updated) {
+                $this->notificationGateway->insert([
+                    'title' => 'Student Transfer Imported',
+                    'text' => "Transfer #{$transfer['transferID']} has been imported",
+                    'moduleName' => 'Student Transfer'
+                ]);
+
+                $results[$transfer['transferID']] = [
+                    'success' => true
+                ];
+            } else {
+                $results[$transfer['transferID']] = [
+                    'success' => false,
+                    'error' => 'Failed to update transfer status'
+                ];
+            }
         }
+
+        return $results;
     }
 
     /**
-     * Process import for a single student.
+     * Process a batch transfer of students
      *
-     * @param string $studentID
-     * @param string $transferID
-     * @param array $options
-     * @return bool Success/failure
+     * @param array $gibbonPersonIDs
+     * @param string $schoolNameTo
+     * @param string $gibbonPersonIDCreated
+     * @param string $notes
+     * @return array
      */
-    protected function processImport($studentID, $transferID, array $options)
+    public function processBatchTransfer(array $gibbonPersonIDs, $schoolNameTo, $gibbonPersonIDCreated, $notes = ''): array
     {
-        try {
-            // Import student data
-            $result = $this->importProcessor->processImport($studentID, $options);
-            return $result && isset($result['success']) ? $result['success'] : false;
-        } catch (\Exception $e) {
-            error_log('Import Processing Error: ' . $e->getMessage());
-            return false;
-        }
-    }
-
-    /**
-     * Process a batch import of transfers.
-     *
-     * @param array $files Array of transfer package files
-     * @param array $options Import options
-     * @param string $gibbonPersonID Person initiating the import
-     * @return array Results of the batch import
-     */
-    public function processBatchImport($files, $options, $gibbonPersonID)
-    {
-        $results = [
-            'success' => 0,
-            'failed' => 0,
-            'errors' => [],
-            'imports' => []
-        ];
-
-        // Start transaction
-        $this->pdo->getConnection()->beginTransaction();
+        $results = [];
 
         try {
-            foreach ($files as $file) {
-                try {
-                    // Validate and process import
-                    $importResult = $this->importProcessor->processImport($file, $options);
+            $this->connection->beginTransaction();
 
-                    $results['success']++;
-                    $results['imports'][] = [
-                        'transferID' => $importResult['transferID'],
-                        'status' => 'success'
+            // Get current school name
+            $currentSchoolName = $this->settingGateway->getSettingByScope('System', 'organisationName');
+
+            foreach ($gibbonPersonIDs as $gibbonPersonID) {
+                $data = [
+                    'gibbonPersonID' => $gibbonPersonID,
+                    'gibbonSchoolYearID' => $this->settingGateway->getSettingByScope('System', 'gibbonSchoolYearID'),
+                    'schoolNameFrom' => $currentSchoolName,
+                    'schoolNameTo' => $schoolNameTo,
+                    'gibbonPersonIDCreated' => $gibbonPersonIDCreated,
+                    'status' => 'Pending',
+                    'notes' => $notes
+                ];
+
+                $inserted = $this->transferGateway->insert($data);
+                if ($inserted) {
+                    $transferID = $this->connection->insertID();
+                    
+                    // Add notification for the student
+                    $this->notificationGateway->insert([
+                        'title' => 'Transfer Initiated',
+                        'text' => "A transfer has been initiated for you to {$schoolNameTo}",
+                        'moduleName' => 'Student Transfer'
+                    ]);
+
+                    $results[$gibbonPersonID] = [
+                        'success' => true,
+                        'transferID' => $transferID
                     ];
-
-                } catch (\Exception $e) {
-                    $results['failed']++;
-                    $results['errors'][] = [
-                        'file' => $file['name'],
-                        'error' => $e->getMessage()
+                } else {
+                    $results[$gibbonPersonID] = [
+                        'success' => false,
+                        'error' => 'Failed to create transfer record'
                     ];
                 }
             }
 
-            // Commit transaction
-            $this->pdo->getConnection()->commit();
-
-            // Send batch completion notification
-            $this->notificationService->sendBatchCompletionNotification($results, $gibbonPersonID);
-
-            return $results;
-
+            $this->connection->commit();
         } catch (\Exception $e) {
-            $this->pdo->getConnection()->rollBack();
+            $this->connection->rollBack();
             throw $e;
         }
+
+        return $results;
     }
 
     /**
-     * Get status of a batch operation.
-     *
-     * @param string $batchID
-     * @return array Batch status and progress
+     * Validates a transfer package
+     * @param string $file Path to package file
+     * @return bool
      */
-    public function getBatchStatus($batchID)
+    protected function validatePackage($file)
     {
-        $sql = "SELECT COUNT(*) as total,
-                SUM(CASE WHEN status = 'Completed' THEN 1 ELSE 0 END) as completed,
-                SUM(CASE WHEN status = 'Failed' THEN 1 ELSE 0 END) as failed
-                FROM gibbonStudentTransferLog
-                WHERE batchID=:batchID";
+        $zip = new \ZipArchive();
+        if ($zip->open($file) !== true) {
+            return false;
+        }
 
-        return $this->pdo->select($sql, ['batchID' => $batchID])->fetch();
+        // Check required files exist
+        $requiredFiles = ['student_data.json', 'metadata.json', 'manifest.json'];
+        foreach ($requiredFiles as $required) {
+            if ($zip->locateName($required) === false) {
+                $zip->close();
+                return false;
+            }
+        }
+
+        // Validate manifest checksums
+        $manifest = json_decode($zip->getFromName('manifest.json'), true);
+        if (!$manifest) {
+            $zip->close();
+            return false;
+        }
+
+        foreach ($manifest as $file => $hash) {
+            $content = $zip->getFromName($file);
+            if (!$content || hash('sha256', $content) !== $hash) {
+                $zip->close();
+                return false;
+            }
+        }
+
+        $zip->close();
+        return true;
+    }
+
+    /**
+     * Extracts and processes package data
+     * @param string $file Path to package file
+     * @return array Processed data
+     */
+    protected function extractPackageData($file)
+    {
+        $zip = new \ZipArchive();
+        $zip->open($file);
+
+        $data = json_decode($zip->getFromName('student_data.json'), true);
+        $metadata = json_decode($zip->getFromName('metadata.json'), true);
+
+        $zip->close();
+
+        return array_merge($data, $metadata);
+    }
+
+    /**
+     * Creates an application form from transfer data
+     * @param array $data Transfer data
+     * @return int Application ID
+     */
+    protected function createApplicationForm($data)
+    {
+        // Format data for application form
+        $formData = [
+            'gibbonSchoolYearID' => $this->settingGateway->getSettingByScope('System', 'gibbonSchoolYearIDNext'),
+            'surname' => $data['personal']['surname'],
+            'firstName' => $data['personal']['firstName'],
+            'preferredName' => $data['personal']['preferredName'],
+            'officialName' => $data['personal']['officialName'],
+            'dob' => $data['personal']['dob'],
+            'email' => $data['personal']['email'],
+            'phone' => $data['personal']['phone1'],
+            'address' => $data['personal']['address1'],
+            'emergency1Name' => $data['family'][0]['preferredName'] . ' ' . $data['family'][0]['surname'],
+            'emergency1Number1' => $data['family'][0]['phone1'],
+            'emergency1Relationship' => $data['family'][0]['relationship'],
+            'medicalInformation' => json_encode($data['medical'])
+        ];
+
+        // Insert application form
+        $sql = "INSERT INTO gibbonApplicationForm SET " . 
+               implode(', ', array_map(function($key) { return "`$key`=:$key"; }, array_keys($formData)));
+        
+        $this->connection->insert($sql, $formData);
+        return $this->connection->lastInsertID();
+    }
+
+    /**
+     * Imports attachments from transfer package
+     * @param string $file Path to package file
+     * @param int $gibbonPersonID Student ID
+     */
+    protected function importAttachments($file, $gibbonPersonID)
+    {
+        $zip = new \ZipArchive();
+        $zip->open($file);
+
+        $targetDir = 'uploads/students/' . $gibbonPersonID;
+        if (!file_exists($targetDir)) {
+            mkdir($targetDir, 0755, true);
+        }
+
+        // Extract attachments
+        for ($i = 0; $i < $zip->numFiles; $i++) {
+            $name = $zip->getNameIndex($i);
+            if (strpos($name, 'attachments/') === 0) {
+                $zip->extractTo($targetDir, $name);
+            }
+        }
+
+        $zip->close();
+    }
+
+    /**
+     * Notifies receiving school of new transfer
+     * @param int $transferID Transfer ID
+     * @param string $schoolNameTo Destination school name
+     */
+    protected function notifyReceivingSchool($transferID, $schoolNameTo)
+    {
+        // Implementation depends on how schools communicate
+        // Could be email, API call, or other notification method
+    }
+
+    /**
+     * Notifies original school of completed transfer
+     * @param int $transferID Transfer ID
+     */
+    protected function notifyOriginalSchool($transferID)
+    {
+        $transfer = $this->transferGateway->getByID($transferID);
+        $student = $this->userGateway->getByID($transfer['gibbonPersonID']);
+        
+        $this->notificationGateway->addNotification([
+            'title' => 'Transfer Complete',
+            'text' => sprintf('Transfer completed for %s %s', $student['preferredName'], $student['surname']),
+            'moduleName' => 'Student Transfer',
+            'actionLink' => '/modules/Student Transfer/transfer_manage.php'
+        ]);
+    }
+
+    /**
+     * Send a notification for a transfer event
+     *
+     * @param string $event The event type (transfer_exported, transfer_imported)
+     * @param array $data Additional data for the notification
+     */
+    protected function sendNotification(string $event, array $data): void
+    {
+        $text = '';
+        $actionLink = '';
+
+        switch ($event) {
+            case 'transfer_exported':
+                $text = sprintf('Student transfer exported for %s (ID: %s)', $data['studentName'], $data['transferID']);
+                $actionLink = '/modules/Student Transfer/transfer_manage_edit.php?gibbonStudentTransferLogID=' . $data['transferID'];
+                break;
+            
+            case 'transfer_imported':
+                $text = sprintf('Student transfer imported for %s (ID: %s)', $data['studentName'], $data['transferID']);
+                $actionLink = '/modules/Student Transfer/transfer_manage_edit.php?gibbonStudentTransferLogID=' . $data['transferID'];
+                break;
+        }
+
+        $this->notificationGateway->insert([
+            'title'    => 'Student Transfer Notification',
+            'text'     => $text,
+            'moduleName' => 'Student Transfer',
+            'actionLink' => $actionLink
+        ]);
+    }
+
+    /**
+     * Validate and extract a ZIP file
+     *
+     * @param string $file Path to the ZIP file
+     * @return array Extracted and validated data
+     * @throws \Exception If validation fails
+     */
+    protected function validateAndExtractZip(string $file): array
+    {
+        if (!file_exists($file)) {
+            throw new \Exception('Import file not found');
+        }
+
+        $zip = new \ZipArchive();
+        if ($zip->open($file) !== true) {
+            throw new \Exception('Failed to open import file');
+        }
+
+        // Extract to temporary directory
+        $tempDir = sys_get_temp_dir() . '/student_transfer_import_' . uniqid();
+        $zip->extractTo($tempDir);
+        $zip->close();
+
+        // Validate required files
+        $requiredFiles = ['student_data.json', 'metadata.json', 'manifest.json'];
+        foreach ($requiredFiles as $requiredFile) {
+            if (!file_exists($tempDir . '/' . $requiredFile)) {
+                throw new \Exception('Missing required file: ' . $requiredFile);
+            }
+        }
+
+        // Load and validate data
+        $studentData = json_decode(file_get_contents($tempDir . '/student_data.json'), true);
+        if (empty($studentData)) {
+            throw new \Exception('Invalid student data format');
+        }
+
+        // Clean up
+        $this->removeDirectory($tempDir);
+
+        return $studentData;
+    }
+
+    /**
+     * Recursively remove a directory
+     *
+     * @param string $dir Directory path
+     */
+    protected function removeDirectory(string $dir): void
+    {
+        if (is_dir($dir)) {
+            $files = scandir($dir);
+            foreach ($files as $file) {
+                if ($file != '.' && $file != '..') {
+                    $path = $dir . '/' . $file;
+                    if (is_dir($path)) {
+                        $this->removeDirectory($path);
+                    } else {
+                        unlink($path);
+                    }
+                }
+            }
+            rmdir($dir);
+        }
     }
 }

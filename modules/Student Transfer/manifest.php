@@ -31,98 +31,164 @@ $version = '1.0.00';
 $author = 'Harrison Idornigie';
 $url = '';
 
+/**
+ * Install checks for Student Transfer module
+ */
+$installChecks = [
+    // Check PHP version
+    'phpVersion' => [
+        'name' => 'PHP Version',
+        'description' => 'Minimum version 7.4.0',
+        'type' => 'php',
+        'version' => '7.4.0'
+    ],
+    // Check PHP extensions
+    'phpExtensions' => [
+        'name' => 'PHP Extensions',
+        'description' => 'Required extensions: zip, openssl',
+        'type' => 'extensions',
+        'extensions' => ['zip', 'openssl']
+    ],
+    // Check MySQL version
+    'mysqlVersion' => [
+        'name' => 'MySQL Version',
+        'description' => 'Minimum version 5.7.0',
+        'type' => 'mysql',
+        'version' => '5.7.0'
+    ],
+    // Check write permissions
+    'writeableFolder' => [
+        'name' => 'Writeable Folders',
+        'description' => 'The following folders must be writeable: uploads/transfers',
+        'type' => 'writeable',
+        'paths' => ['uploads/transfers']
+    ]
+];
+
 //Module tables
-$moduleTables[] = "CREATE TABLE `gibbonStudentTransferLog` (
-    `gibbonStudentTransferLogID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
-    `gibbonPersonID` INT(10) UNSIGNED ZEROFILL NOT NULL,
-    `gibbonPersonIDCreated` INT(10) UNSIGNED ZEROFILL NOT NULL,
-    `status` ENUM('Pending','Exported','Imported','Cancelled') NOT NULL DEFAULT 'Pending',
-    `comments` TEXT NULL,
-    `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `timestampModified` TIMESTAMP NULL,
-    `exportTimestamp` TIMESTAMP NULL,
-    `importTimestamp` TIMESTAMP NULL,
-    `signature` TEXT NULL,
-    `downloadToken` VARCHAR(255) NULL,
-    `downloadExpiry` TIMESTAMP NULL,
-    `packagePassword` VARCHAR(255) NULL,
-    PRIMARY KEY (`gibbonStudentTransferLogID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+$moduleTables = [
+    "DROP TABLE IF EXISTS `gibbonStudentTransferLog`",
+    "CREATE TABLE `gibbonStudentTransferLog` (
+        `gibbonStudentTransferLogID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
+        `gibbonPersonID` INT(10) UNSIGNED ZEROFILL NOT NULL,
+        `gibbonSchoolYearID` INT(10) UNSIGNED ZEROFILL NOT NULL,
+        `schoolNameFrom` VARCHAR(100) NOT NULL,
+        `schoolNameTo` VARCHAR(100) NOT NULL,
+        `gibbonPersonIDCreated` INT(10) UNSIGNED ZEROFILL NOT NULL,
+        `status` ENUM('Pending','Exported','Imported','Complete','Cancelled') NOT NULL DEFAULT 'Pending',
+        `notes` TEXT NULL,
+        `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `timestampModified` TIMESTAMP NULL DEFAULT NULL,
+        `exportTimestamp` TIMESTAMP NULL DEFAULT NULL,
+        `importTimestamp` TIMESTAMP NULL DEFAULT NULL,
+        `signature` TEXT NULL,
+        `downloadToken` VARCHAR(255) NULL,
+        `downloadExpiry` TIMESTAMP NULL DEFAULT NULL,
+        `packagePassword` VARCHAR(255) NULL,
+        PRIMARY KEY (`gibbonStudentTransferLogID`),
+        INDEX `gibbonPersonID` (`gibbonPersonID`),
+        INDEX `gibbonSchoolYearID` (`gibbonSchoolYearID`),
+        INDEX `gibbonPersonIDCreated` (`gibbonPersonIDCreated`),
+        CONSTRAINT `gibbonStudentTransferLog_ibfk_1` FOREIGN KEY (`gibbonPersonID`) 
+            REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE RESTRICT,
+        CONSTRAINT `gibbonStudentTransferLog_ibfk_2` FOREIGN KEY (`gibbonSchoolYearID`) 
+            REFERENCES `gibbonSchoolYear` (`gibbonSchoolYearID`) ON DELETE RESTRICT,
+        CONSTRAINT `gibbonStudentTransferLog_ibfk_3` FOREIGN KEY (`gibbonPersonIDCreated`) 
+            REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
-$moduleTables[] = "CREATE TABLE `gibbonStudentTransferToken` (
-    `gibbonStudentTransferTokenID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
-    `transferID` INT(12) UNSIGNED ZEROFILL NOT NULL,
-    `token` VARCHAR(255) NOT NULL,
-    `expiry` TIMESTAMP NOT NULL,
-    `used` TINYINT(1) NOT NULL DEFAULT '0',
-    PRIMARY KEY (`gibbonStudentTransferTokenID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+    "DROP TABLE IF EXISTS `gibbonStudentTransferData`",
+    "CREATE TABLE `gibbonStudentTransferData` (
+        `gibbonStudentTransferDataID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
+        `gibbonStudentTransferLogID` INT(12) UNSIGNED ZEROFILL NOT NULL,
+        `category` VARCHAR(50) NOT NULL,
+        `name` VARCHAR(100) NOT NULL,
+        `value` TEXT NULL,
+        `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`gibbonStudentTransferDataID`),
+        INDEX `gibbonStudentTransferLogID` (`gibbonStudentTransferLogID`),
+        INDEX `category` (`category`),
+        CONSTRAINT `gibbonStudentTransferData_ibfk_1` FOREIGN KEY (`gibbonStudentTransferLogID`) 
+            REFERENCES `gibbonStudentTransferLog` (`gibbonStudentTransferLogID`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
-$moduleTables[] = "CREATE TABLE `gibbonStudentTransferPassword` (
-    `gibbonStudentTransferPasswordID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
-    `zipPath` VARCHAR(255) NOT NULL,
-    `password` VARCHAR(255) NOT NULL,
-    PRIMARY KEY (`gibbonStudentTransferPasswordID`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
-
-//Settings
-$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
-    VALUES ('Student Transfer', 'retentionPeriodActive', 'Active Transfer Retention', 'Number of days to retain active transfers.', '90');";
-
-$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
-    VALUES ('Student Transfer', 'retentionPeriodCompleted', 'Completed Transfer Retention', 'Number of days to retain completed transfers before archiving.', '365');";
-
-$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
-    VALUES ('Student Transfer', 'retentionPeriodCancelled', 'Cancelled Transfer Retention', 'Number of days to retain cancelled transfers.', '30');";
-
-$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
-    VALUES ('Student Transfer', 'retentionPeriodArchive', 'Archive Retention', 'Number of days to retain archived transfers.', '730');";
-
-$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
-    VALUES ('Student Transfer', 'enableAutoArchive', 'Enable Auto-Archive', 'Automatically archive old transfers according to retention policy.', 'Y');";
-
-$gibbonSetting[] = "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
-    VALUES ('Student Transfer', 'enableAutoDelete', 'Enable Auto-Delete', 'Automatically delete expired transfers according to retention policy.', 'Y');";
-
-$gibbonSetting[] = [
-    'scope'         => 'Student Transfer',
-    'name'          => 'packageExpiryDays',
-    'nameDisplay'   => 'Package Expiry Days',
-    'description'   => 'Number of days before a transfer package expires.',
-    'value'         => '7'
+    "DROP TABLE IF EXISTS `gibbonStudentTransferAttachment`",
+    "CREATE TABLE `gibbonStudentTransferAttachment` (
+        `gibbonStudentTransferAttachmentID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
+        `gibbonStudentTransferLogID` INT(12) UNSIGNED ZEROFILL NOT NULL,
+        `name` VARCHAR(100) NOT NULL,
+        `path` VARCHAR(255) NOT NULL,
+        `type` VARCHAR(100) NOT NULL,
+        `size` INT(11) NOT NULL,
+        `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`gibbonStudentTransferAttachmentID`),
+        INDEX `gibbonStudentTransferLogID` (`gibbonStudentTransferLogID`),
+        CONSTRAINT `gibbonStudentTransferAttachment_ibfk_1` FOREIGN KEY (`gibbonStudentTransferLogID`) 
+            REFERENCES `gibbonStudentTransferLog` (`gibbonStudentTransferLogID`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 ];
 
-$gibbonSetting[] = [
-    'scope'         => 'Student Transfer',
-    'name'          => 'allowBatchTransfers',
-    'nameDisplay'   => 'Allow Batch Transfers',
-    'description'   => 'Allow multiple students to be transferred at once.',
-    'value'         => 'Y'
-];
-
-$gibbonSetting[] = [
-    'scope'         => 'Student Transfer',
-    'name'          => 'requiredDocuments',
-    'nameDisplay'   => 'Required Documents',
-    'description'   => 'List of documents required for transfer (comma-separated).',
-    'value'         => 'Photo,Medical Form,Previous Reports'
+//Module settings
+$gibbonSetting = [
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('Student Transfer', 'requiredDocuments', 'Required Documents', 'Comma-separated list of required documents for transfer.', 'Photo,ID Card,Medical Records')",
+    
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('Student Transfer', 'retentionPeriodCompleted', 'Completed Transfer Retention', 'Number of days to retain completed transfers before archiving.', '365')",
+    
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('Student Transfer', 'enableBatchTransfers', 'Enable Batch Transfers', 'Allow administrators to process multiple transfers at once.', 'Y')",
+    
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('Student Transfer', 'transferPrivateKey', 'Transfer Private Key', 'Private key for signing transfer packages.', '')",
+    
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('Student Transfer', 'transferPublicKey', 'Transfer Public Key', 'Public key for verifying transfer packages.', '')"
 ];
 
 //Action rows
-$actionRows[0]['name'] = 'Manage Student Transfers';
-$actionRows[0]['precedence'] = '0';
-$actionRows[0]['category'] = 'Students';
-$actionRows[0]['description'] = 'View and manage student transfers between schools.';
-$actionRows[0]['URLList'] = 'transfer_manage.php,transfer_manage_add.php,transfer_manage_edit.php,transfer_manage_delete.php,transfer_manage_export.php,transfer_manage_import.php';
-$actionRows[0]['entryURL'] = 'transfer_manage.php';
-$actionRows[0]['entrySidebar'] = 'Y';
-$actionRows[0]['menuShow'] = 'Y';
-$actionRows[0]['defaultPermissionAdmin'] = 'Y';
-$actionRows[0]['defaultPermissionTeacher'] = 'N';
-$actionRows[0]['defaultPermissionStudent'] = 'N';
-$actionRows[0]['defaultPermissionParent'] = 'N';
-$actionRows[0]['defaultPermissionSupport'] = 'N';
-$actionRows[0]['categoryPermissionStaff'] = 'Y';
-$actionRows[0]['categoryPermissionStudent'] = 'N';
-$actionRows[0]['categoryPermissionParent'] = 'N';
-$actionRows[0]['categoryPermissionOther'] = 'N';
+$actionRows = [
+    [
+        'name' => 'Manage Student Transfers',
+        'precedence' => '0',
+        'category' => 'Student Data',
+        'description' => 'View and manage student transfers between schools.',
+        'URLList' => 'transfer_manage.php,transfer_manage_add.php,transfer_manage_edit.php,transfer_manage_delete.php,transfer_manage_export.php,transfer_manage_import.php,transfer_manage_batch.php',
+        'entryURL' => 'transfer_manage.php',
+        'entrySidebar' => 'Y',
+        'menuShow' => 'Y',
+        'defaultPermissionAdmin' => 'Y',
+        'defaultPermissionTeacher' => 'N',
+        'defaultPermissionStudent' => 'N',
+        'defaultPermissionParent' => 'N',
+        'defaultPermissionSupport' => 'N',
+        'categoryPermissionStaff' => 'Y',
+        'categoryPermissionStudent' => 'N',
+        'categoryPermissionParent' => 'N',
+        'categoryPermissionOther' => 'N'
+    ],
+    [
+        'name' => 'Student Transfer Settings',
+        'precedence' => '1',
+        'category' => 'Admin',
+        'description' => 'Manage Student Transfer module settings.',
+        'URLList' => 'settings_manage.php',
+        'entryURL' => 'settings_manage.php',
+        'entrySidebar' => 'Y',
+        'menuShow' => 'Y',
+        'defaultPermissionAdmin' => 'Y',
+        'defaultPermissionTeacher' => 'N',
+        'defaultPermissionStudent' => 'N',
+        'defaultPermissionParent' => 'N',
+        'defaultPermissionSupport' => 'N',
+        'categoryPermissionStaff' => 'N',
+        'categoryPermissionStudent' => 'N',
+        'categoryPermissionParent' => 'N',
+        'categoryPermissionOther' => 'N'
+    ]
+];
