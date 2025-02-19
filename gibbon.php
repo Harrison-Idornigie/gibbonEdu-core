@@ -48,6 +48,13 @@ $container = new League\Container\Container();
 $container->delegate(new League\Container\ReflectionContainer);
 $container->add('autoloader', $autoloader);
 
+// Store the container in the session
+if (session_status() == PHP_SESSION_ACTIVE) {
+    if (!isset($_SESSION['container'])) {
+        $_SESSION['container'] = $container;
+    }
+}
+
 $container->inflector(\League\Container\ContainerAwareInterface::class)
           ->invokeMethod('setContainer', [$container]);
 
@@ -145,3 +152,4 @@ if (!empty($session->get('module'))) {
 
 // Sanitize incoming user-supplied GET variables
 $_GET = $container->get(\Gibbon\Data\Validator::class)->sanitizeUrlParams($_GET);
+

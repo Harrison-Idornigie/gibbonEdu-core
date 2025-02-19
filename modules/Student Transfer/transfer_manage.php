@@ -6,6 +6,13 @@ Copyright 2010, Gibbon Foundation
 Gibbon, Gibbon Education Ltd. (Hong Kong)
 */
 
+use Gibbon\Tables\DataTable;
+use Gibbon\Services\Format;
+use Gibbon\Forms\Form;
+use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
+use Gibbon\Domain\Students\StudentGateway;
+use Gibbon\Domain\System\SettingGateway;
+
 require_once __DIR__ . '/../../gibbon.php';
 require_once __DIR__ . '/moduleFunctions.php';
 
@@ -22,8 +29,17 @@ $gibbonSchoolYearID = isset($_GET['gibbonSchoolYearID'])
     ? str_pad(preg_replace('/[^0-9]/', '', $_GET['gibbonSchoolYearID']), 10, '0', STR_PAD_LEFT)
     : $session->get('gibbonSchoolYearID');
 
+/** @var TransferGateway $transferGateway */
+$transferGateway = $container->get(TransferGateway::class);
+
+/** @var StudentGateway $studentGateway */
+$studentGateway = $container->get(StudentGateway::class);
+
+/** @var SettingGateway $settingGateway */
+$settingGateway = $container->get(SettingGateway::class);
+
 // Check if tables exist
-if (!checkTablesExist($connection2)) {
+if (!$transferGateway->tableExists('gibbonStudentTransferLog')) {
     $url = $session->get('absoluteURL').'/index.php?q=/modules/System Admin/module_manage.php';
     $page->addError(__('Required database tables not found. Please reinstall the module.'));
     $page->addWarning(sprintf(__('Click %1$shere%2$s to return to the module management page.'), "<a href='$url'>", '</a>'));
@@ -38,7 +54,7 @@ $requiredColumns = [
 ];
 
 foreach ($requiredColumns as $table => $columns) {
-    if (!checkColumnsExist($connection2, $table, $columns)) {
+    if (!$transferGateway->tableHasColumns($table, $columns)) {
         $url = $session->get('absoluteURL').'/index.php?q=/modules/System Admin/module_manage.php';
         $page->addError(sprintf(__('Required columns not found in table %1$s. Please reinstall the module.'), $table));
         $page->addWarning(sprintf(__('Click %1$shere%2$s to return to the module management page.'), "<a href='$url'>", '</a>'));
@@ -46,46 +62,26 @@ foreach ($requiredColumns as $table => $columns) {
     }
 }
 
-use Gibbon\Forms\Form;
-use Gibbon\Services\Format;
-use Gibbon\Tables\DataTable;
-use Gibbon\Domain\Students\StudentGateway;
-use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
-use Gibbon\Domain\System\SettingGateway;
-
-// Module includes
-require_once __DIR__ . '/moduleFunctions.php';
-
-// Proceed!
-$page->breadcrumbs->add(__('Manage Student Transfers'));
-
-// Get action parameters
+// Get search params
 $search = $_GET['search'] ?? '';
-
-// Setup gateways
-$transferGateway = $container->get(TransferGateway::class);
-$studentGateway = $container->get(StudentGateway::class);
-$settingGateway = $container->get(SettingGateway::class);
 
 // Setup search form
 $form = Form::create('search', $session->get('absoluteURL').'/index.php', 'get');
 $form->setTitle(__('Search & Filter'));
-$form->setClass('noIntBorder fullWidth');
-
 $form->addHiddenValue('q', '/modules/Student Transfer/transfer_manage.php');
 $form->addHiddenValue('gibbonSchoolYearID', $gibbonSchoolYearID);
 
 $row = $form->addRow();
-    $row->addLabel('search', __('Search For'))->description(__('Student Name, ID'));
-    $row->addTextField('search')->setValue($search);
+$row->addLabel('search', __('Search'));
+$row->addTextField('search')->setValue($search);
 
 $row = $form->addRow();
-    $row->addSearchSubmit($session, __('Clear Search'));
+$row->addSearchSubmit($session, __('Clear Search'));
 
 echo $form->getOutput();
 
 // Setup data table
-$table = DataTable::create('transfers');
+$table = DataTable::create('studentTransfers');
 $table->setTitle(__('Student Transfers'));
 $table->setDescription(__('View and manage student transfers between schools.'));
 
@@ -126,6 +122,16 @@ $table->addColumn('schoolTo', __('To School'))
         return $row['schoolNameTo'];
     });
 
+$table->addColumn('timestampCreated', __('Created'))
+    ->sortable(['timestampCreated'])
+    ->format(function ($row) {
+        $output = Format::dateTime($row['timestampCreated']);
+        if (!empty($row['timestampModified'])) {
+            $output .= "<br/><small><i>" . __('Modified') . ": " . Format::dateTime($row['timestampModified']) . "</i></small>";
+        }
+        return $output;
+    });
+
 $table->addColumn('status', __('Status'))
     ->sortable(['status'])
     ->format(function ($row) {
@@ -136,13 +142,15 @@ $table->addColumn('status', __('Status'))
             'Complete' => 'success',
             'Cancelled' => 'error'
         ];
-        return Format::tag($row['status'], $statusClasses[$row['status']] ?? 'default');
-    });
-
-$table->addColumn('timestamp', __('Date'))
-    ->sortable(['timestampCreated'])
-    ->format(function ($row) {
-        return Format::date($row['timestampCreated']);
+        $output = Format::tag($row['status'], $statusClasses[$row['status']] ?? 'default');
+        
+        if ($row['status'] == 'Exported' && !empty($row['exportTimestamp'])) {
+            $output .= "<br/><small>" . Format::dateTime($row['exportTimestamp']) . "</small>";
+        } elseif ($row['status'] == 'Imported' && !empty($row['importTimestamp'])) {
+            $output .= "<br/><small>" . Format::dateTime($row['importTimestamp']) . "</small>";
+        }
+        
+        return $output;
     });
 
 // Add actions
@@ -170,13 +178,12 @@ $table->addActionColumn()
             ->modalWindow(650, 400);
     });
 
-// Add filters
+// Query transfers
 $criteria = $transferGateway->newQueryCriteria()
     ->searchBy($transferGateway->getSearchableColumns(), $search)
     ->sortBy('timestampCreated', 'DESC')
     ->fromPOST();
 
-// Get and display transfers
 $transfers = $transferGateway->queryTransfers($criteria, $gibbonSchoolYearID);
 echo $table->render($transfers);
 

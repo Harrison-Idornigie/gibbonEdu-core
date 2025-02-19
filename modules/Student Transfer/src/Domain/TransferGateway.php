@@ -8,9 +8,10 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 
 namespace Gibbon\Module\StudentTransfer\Domain;
 
-use Gibbon\Domain\Traits\TableAware;
+use Gibbon\Domain\Gateway;
 use Gibbon\Domain\QueryCriteria;
 use Gibbon\Domain\QueryableGateway;
+use Gibbon\Domain\Traits\TableAware;
 use Gibbon\Domain\DataSet;
 use Gibbon\Contracts\Database\Connection;
 use Aura\SqlQuery\Common\DeleteInterface;
@@ -20,8 +21,8 @@ use Gibbon\Contracts\Database\Result;
 /**
  * Transfer Gateway
  *
- * @version v1.0.00
- * @since   v1.0.00
+ * @version v29
+ * @since   v29
  */
 class TransferGateway extends QueryableGateway
 {
@@ -29,45 +30,53 @@ class TransferGateway extends QueryableGateway
 
     private static $tableName = 'gibbonStudentTransferLog';
     private static $primaryKey = 'gibbonStudentTransferLogID';
-    
-    private static $searchableColumns = ['gibbonPerson.surname', 'gibbonPerson.preferredName', 'gibbonPerson.username'];
+    private static $searchableColumns = [
+        'schoolNameFrom',
+        'schoolNameTo',
+        'status'
+    ];
     
     /**
      * @var Connection
      */
     private $connection;
 
-    public function __construct(Connection $connection)
+    /**
+     * Create a new gateway instance using the supplied database connection.
+     * 
+     * @param Connection $db
+     */
+    public function __construct(Connection $db)
     {
-        parent::__construct($connection);
-        $this->connection = $connection;
+        parent::__construct($db);
+        $this->connection = $db;
     }
 
     /**
      * Queries all transfers with detailed information
-     * @param QueryCriteria $criteria
-     * @param int|null $gibbonSchoolYearID
+     * @param QueryCriteria $criteria Query criteria for filtering and sorting
+     * @param int|null $gibbonSchoolYearID Optional school year ID filter
      * @return DataSet
      */
     public function queryTransfers(QueryCriteria $criteria, $gibbonSchoolYearID = null): DataSet
     {
         $query = $this
             ->newQuery()
-            ->from(self::$tableName)
+            ->from($this->getTableName())
             ->cols([
-                self::$tableName.'.gibbonStudentTransferLogID',
-                self::$tableName.'.timestampCreated as timestampCreated',
-                self::$tableName.'.status',
-                self::$tableName.'.schoolNameFrom',
-                self::$tableName.'.schoolNameTo',
+                'gibbonStudentTransferLogID',
+                'timestampCreated',
+                $this->getTableName().'.status',
+                'schoolNameFrom',
+                'schoolNameTo',
                 'gibbonPerson.surname',
                 'gibbonPerson.preferredName',
                 'gibbonPerson.username',
                 'gibbonYearGroup.nameShort as yearGroup'
             ])
-            ->innerJoin('gibbonPerson', 'gibbonPerson.gibbonPersonID='.self::$tableName.'.gibbonPersonID')
-            ->leftJoin('gibbonStudentEnrolment', 'gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID')
-            ->leftJoin('gibbonYearGroup', 'gibbonYearGroup.gibbonYearGroupID=gibbonStudentEnrolment.gibbonYearGroupID');
+            ->innerJoin('gibbonPerson', 'gibbonPerson.gibbonPersonID=gibbonStudentTransferLog.gibbonPersonID')
+            ->innerJoin('gibbonStudentEnrolment', 'gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID')
+            ->innerJoin('gibbonYearGroup', 'gibbonYearGroup.gibbonYearGroupID=gibbonStudentEnrolment.gibbonYearGroupID');
 
         if ($gibbonSchoolYearID != null) {
             $query->where('gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID')
@@ -76,25 +85,10 @@ class TransferGateway extends QueryableGateway
 
         $criteria->addFilterRules([
             'status' => function($query, $status) {
-                return $query->where(self::$tableName.'.status = :status')
+                return $query->where($this->getTableName().'.status = :status')
                            ->bindValue('status', $status);
             }
         ]);
-
-        // Handle sorting with fully qualified column names in orderBy
-        if ($criteria->hasSort('surname')) {
-            $direction = $criteria->getSortBy('surname');
-            $query->orderBy(['gibbonPerson.surname '.$direction]);
-        } elseif ($criteria->hasSort('preferredName')) {
-            $direction = $criteria->getSortBy('preferredName');
-            $query->orderBy(['gibbonPerson.preferredName '.$direction]);
-        } elseif ($criteria->hasSort('yearGroup')) {
-            $direction = $criteria->getSortBy('yearGroup');
-            $query->orderBy(['yearGroup '.$direction]);
-        } elseif ($criteria->hasSort('timestampCreated')) {
-            $direction = $criteria->getSortBy('timestampCreated');
-            $query->orderBy([self::$tableName.'.timestampCreated '.$direction]);
-        }
 
         return $this->runQuery($query, $criteria);
     }
@@ -235,24 +229,14 @@ class TransferGateway extends QueryableGateway
     /**
      * Gets a transfer record by ID
      * @param string $gibbonStudentTransferLogID
-     * @return array
+     * @return array|null
      */
-    public function getTransferByID($gibbonStudentTransferLogID): array
+    public function getTransferByID($gibbonStudentTransferLogID)
     {
-        // Clean and format the ID
-        $gibbonStudentTransferLogID = preg_replace('/[^0-9]/', '', $gibbonStudentTransferLogID);
-        if (!empty($gibbonStudentTransferLogID)) {
-            $gibbonStudentTransferLogID = str_pad($gibbonStudentTransferLogID, 12, '0', STR_PAD_LEFT);
-        }
-
-        $query = $this
-            ->newSelect()
-            ->from($this->getTableName())
-            ->cols(['*'])
-            ->where('gibbonStudentTransferLogID=:gibbonStudentTransferLogID')
-            ->bindValue('gibbonStudentTransferLogID', $gibbonStudentTransferLogID);
-
-        return $this->runSelect($query)->fetch() ?? [];
+        $data = ['gibbonStudentTransferLogID' => $gibbonStudentTransferLogID];
+        $sql = "SELECT * FROM {$this->getTableName()} WHERE gibbonStudentTransferLogID=:gibbonStudentTransferLogID";
+        
+        return $this->connection->selectOne($sql, $data);
     }
 
     /**
@@ -319,15 +303,15 @@ class TransferGateway extends QueryableGateway
             ->newSelect()
             ->from('gibbonPerson')
             ->cols([
-                'gibbonPerson.gibbonPersonID',
-                'gibbonPerson.surname',
-                'gibbonPerson.preferredName',
-                'gibbonPerson.username',
+                'gibbonPersonID',
+                'surname',
+                'preferredName',
+                'username',
                 'gibbonYearGroup.nameShort as yearGroup'
             ])
             ->innerJoin('gibbonStudentEnrolment', 'gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID')
             ->innerJoin('gibbonYearGroup', 'gibbonYearGroup.gibbonYearGroupID=gibbonStudentEnrolment.gibbonYearGroupID')
-            ->where('gibbonPerson.status=:status')
+            ->where('status=:status')
             ->where('gibbonStudentEnrolment.gibbonSchoolYearID=:gibbonSchoolYearID')
             ->bindValue('status', 'Full')
             ->bindValue('gibbonSchoolYearID', $gibbonSchoolYearID)
@@ -362,6 +346,35 @@ class TransferGateway extends QueryableGateway
         ];
 
         return new DataSet($data);
+    }
+
+    /**
+     * Check if a table exists in the database
+     *
+     * @param string $tableName
+     * @return bool
+     */
+    public function tableExists($tableName)
+    {
+        $sql = "SHOW TABLES LIKE :tableName";
+        $result = $this->connection->select($sql, ['tableName' => $tableName]);
+        return !empty($result);
+    }
+
+    /**
+     * Check if a table has all required columns
+     *
+     * @param string $tableName
+     * @param array $columns
+     * @return bool
+     */
+    public function tableHasColumns($tableName, $columns)
+    {
+        $sql = "SHOW COLUMNS FROM {$tableName}";
+        $result = $this->connection->select($sql);
+        $existingColumns = array_column($result->fetchAll(), 'Field');
+        
+        return empty(array_diff($columns, $existingColumns));
     }
 
     /**

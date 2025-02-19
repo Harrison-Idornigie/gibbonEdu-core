@@ -6,31 +6,41 @@ Copyright (c) 2010-2022
 Gibbon, Gibbon Education Ltd. (Hong Kong)
 */
 
-use Gibbon\Services\Format;
-use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
-use Gibbon\Domain\User\UserGateway;
+use Gibbon\Forms\Form;
+use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\Students\StudentGateway;
+use Gibbon\Domain\User\UserGateway;
+use Gibbon\Domain\School\FacilityGateway;
 use Gibbon\Domain\Students\MedicalGateway;
 use Gibbon\Domain\Students\FirstAidGateway;
-use Gibbon\Domain\System\SettingGateway;
-use Gibbon\Module\StudentTransfer\Domain\StudentExporter;
-use Gibbon\Domain\School\FacilityGateway;
 use Gibbon\Domain\System\CustomFieldGateway;
+use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
 use Gibbon\Module\StudentTransfer\Domain\SecurityService;
+use Gibbon\Module\StudentTransfer\Domain\StudentExporter;
+use Gibbon\Services\Format;
 
 // Module includes - MUST be after use statements
 require_once __DIR__ . '/../../gibbon.php';
 require_once __DIR__ . '/moduleFunctions.php';
 
-if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_manage_export.php') == false) {
+// Get global container and required services
+global $container;
+
+// Get database connection
+$connection = $container->get('db');
+$pdo = $connection->getConnection();
+
+if (isActionAccessible($guid, $pdo, '/modules/Student Transfer/transfer_manage_export.php') == false) {
     // Access denied
     $page->addError(__('You do not have access to this action.'));
 } else {
     // Proceed!
     $gibbonStudentTransferLogID = $_GET['gibbonStudentTransferLogID'] ?? '';
 
-    // Validate the transfer ID
+    // Get transfer gateway from container
     $transferGateway = $container->get(TransferGateway::class);
+
+    // Validate the transfer ID
     $transfer = $transferGateway->getTransferByID($gibbonStudentTransferLogID);
 
     if (empty($transfer)) {
@@ -44,43 +54,53 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
                 ->add(__('Manage Student Transfers'), 'transfer_manage.php')
                 ->add(__('Export Student Transfer'));
 
-            // Get global container and required services
-            global $container;
-
-            // Get database connection
-            $connection = $container->get('db');
-
-            // Initialize gateways
-            $transferGateway = $container->get(TransferGateway::class);
-            $userGateway = $container->get(UserGateway::class);
-            $studentGateway = $container->get(StudentGateway::class);
-            $medicalGateway = $container->get(MedicalGateway::class);
-            $firstAidGateway = $container->get(FirstAidGateway::class);
-            $settingGateway = $container->get(SettingGateway::class);
-            $facilityGateway = $container->get(FacilityGateway::class);
-            $customFieldGateway = $container->get(CustomFieldGateway::class);
-
-            // Initialize services
-            $session = $container->get('session');
-            $securityService = $container->get(SecurityService::class);
-
-            // Initialize StudentExporter with required dependencies
-            $studentExporter = new StudentExporter(
-                $connection,
-                $settingGateway,
-                $studentGateway,
-                $facilityGateway,
-                $userGateway,
-                $customFieldGateway,
-                $medicalGateway,
-                $firstAidGateway,
-                $session,
-                $securityService
-            );
-
             try {
+                // Check for required PHP extensions
+                if (!extension_loaded('zip')) {
+                    throw new \RuntimeException('The PHP ZIP extension is required for student transfers.');
+                }
+
+                // Check for ZIP encryption support
+                if (!defined('ZipArchive::EM_AES_256')) {
+                    throw new \RuntimeException('Your PHP ZIP extension does not support encryption. Please upgrade to PHP 7.2 or later.');
+                }
+
+                // Get student ID from transfer record
+                $studentID = $transfer['gibbonPersonID'];
+                
+                // Initialize required services
+                $securityService = new SecurityService($connection);
+                $settingGateway = new SettingGateway($connection);
+                
+                // Verify system install key exists
+                if (empty($settingGateway->getSettingByScope('System', 'installKey'))) {
+                    throw new \RuntimeException('System install key is not set. Please check system settings.');
+                }
+
+                // Initialize remaining services
+                $studentGateway = new StudentGateway($connection);
+                $facilityGateway = new FacilityGateway($connection);
+                $userGateway = new UserGateway($connection);
+                $customFieldGateway = new CustomFieldGateway($connection);
+                $medicalGateway = new MedicalGateway($connection);
+                $firstAidGateway = new FirstAidGateway($connection);
+
+                // Initialize StudentExporter with dependencies
+                $studentExporter = new StudentExporter(
+                    $connection,
+                    $settingGateway,
+                    $studentGateway,
+                    $facilityGateway,
+                    $userGateway,
+                    $customFieldGateway,
+                    $medicalGateway,
+                    $firstAidGateway,
+                    $session,
+                    $securityService
+                );
+                
                 // Generate the ZIP file
-                $result = $studentExporter->exportToZip($transfer['gibbonPersonID'], $transfer['gibbonStudentTransferLogID']);
+                $result = $studentExporter->exportToZip($studentID, $gibbonStudentTransferLogID);
                 $zipFile = $result['path'];
                 $password = $result['password'];
 
@@ -92,6 +112,11 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
                     'downloadToken' => $result['token'],
                     'downloadExpiry' => $result['expiry']
                 ]);
+
+                // Verify the ZIP file exists and is readable
+                if (!file_exists($zipFile) || !is_readable($zipFile)) {
+                    throw new \RuntimeException('Generated ZIP file is not accessible.');
+                }
 
                 // Set headers for download
                 header('Content-Type: application/zip');
@@ -110,16 +135,38 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
                 $downloadURL .= '?transferID=' . $transfer['gibbonStudentTransferLogID'];
                 $downloadURL .= '&token=' . $result['token'];
                 
-                $page->addSuccess(__('Secure download link (valid for 1 hour): {link}', ['link' => Format::link($downloadURL, $downloadURL)]));
-
-                // Output file
-                readfile($zipFile);
-
-                // Clean up
-                unlink($zipFile);
-                exit();
+                // Output the file in chunks to handle large files
+                if ($fileHandle = fopen($zipFile, 'rb')) {
+                    while (!feof($fileHandle) && connection_status() == 0) {
+                        echo fread($fileHandle, 8192);
+                        flush();
+                    }
+                    fclose($fileHandle);
+                    
+                    // Clean up the temporary ZIP file
+                    if (file_exists($zipFile)) {
+                        unlink($zipFile);
+                    }
+                    exit();
+                } else {
+                    throw new \RuntimeException('Failed to read ZIP file for download.');
+                }
             } catch (\Exception $e) {
-                $page->addError(__('There was an error exporting the student data: {error}', ['error' => $e->getMessage()]));
+                // Log the full error for administrators
+                error_log('Student Transfer Export Error: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+                
+                // Show a user-friendly error message
+                $page->addError(__('An error occurred while creating the transfer package: {error}', [
+                    'error' => $e->getMessage()
+                ]));
+                
+                // Clean up any temporary files
+                if (isset($zipFile) && file_exists($zipFile)) {
+                    unlink($zipFile);
+                }
+                if (isset($tempDir) && file_exists($tempDir)) {
+                    $this->cleanupTempDir($tempDir);
+                }
             }
         }
     }

@@ -9,6 +9,43 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 use Gibbon\Contracts\Database\Connection;
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Services\Format;
+use Gibbon\Domain\Students\StudentGateway;
+use Gibbon\Domain\User\UserGateway;
+use Gibbon\Domain\School\FacilityGateway;
+use Gibbon\Domain\Students\MedicalGateway;
+use Gibbon\Domain\Students\FirstAidGateway;
+use Gibbon\Domain\System\CustomFieldGateway;
+use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
+use Gibbon\Module\StudentTransfer\Domain\SecurityService;
+use Gibbon\Module\StudentTransfer\Domain\StudentExporter;
+use Gibbon\Session\Session;
+
+/**
+ * Register module services with the container
+ */
+global $container;
+
+// Register the TransferGateway
+$container->add(TransferGateway::class)
+    ->addArgument(Connection::class);
+
+// Register the SecurityService
+$container->add(SecurityService::class)
+    ->addArgument(Connection::class)
+    ->addArgument(SettingGateway::class);
+
+// Register the StudentExporter with all its dependencies
+$container->add(StudentExporter::class)
+    ->addArgument(Connection::class)
+    ->addArgument(SettingGateway::class)
+    ->addArgument(StudentGateway::class)
+    ->addArgument(FacilityGateway::class)
+    ->addArgument(UserGateway::class)
+    ->addArgument(CustomFieldGateway::class)
+    ->addArgument(MedicalGateway::class)
+    ->addArgument(FirstAidGateway::class)
+    ->addArgument(Session::class)
+    ->addArgument(SecurityService::class);
 
 /**
  * Student Transfer Module Helper Functions

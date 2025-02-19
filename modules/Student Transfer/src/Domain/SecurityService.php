@@ -8,6 +8,7 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 
 namespace Gibbon\Module\StudentTransfer\Domain;
 
+use Gibbon\Contracts\Database\Connection;
 use Gibbon\Domain\System\SettingGateway;
 
 /**
@@ -23,18 +24,19 @@ use Gibbon\Domain\System\SettingGateway;
  */
 class SecurityService
 {
-    private $settingGateway;
+    private $pdo;
     private $secretKey;
 
     /**
      * Create a new SecurityService instance.
      *
-     * @param SettingGateway $settingGateway
+     * @param Connection $pdo
      */
-    public function __construct(SettingGateway $settingGateway)
+    public function __construct(Connection $pdo)
     {
-        $this->settingGateway = $settingGateway;
-        $this->secretKey = $this->settingGateway->getSettingByScope('System', 'installKey');
+        $this->pdo = $pdo;
+        $settingGateway = new SettingGateway($pdo);
+        $this->secretKey = $settingGateway->getSettingByScope('System', 'installKey');
     }
 
     /**
@@ -43,10 +45,23 @@ class SecurityService
      *
      * @param string $filePath Path to the file to sign
      * @return string The digital signature
+     * @throws \RuntimeException If file cannot be read or secret key is not set
      */
     public function createDigitalSignature($filePath)
     {
+        if (empty($this->secretKey)) {
+            throw new \RuntimeException('System install key not found. Please check system settings.');
+        }
+
+        if (!file_exists($filePath) || !is_readable($filePath)) {
+            throw new \RuntimeException('Cannot read file for signing: ' . $filePath);
+        }
+
         $content = file_get_contents($filePath);
+        if ($content === false) {
+            throw new \RuntimeException('Failed to read file contents: ' . $filePath);
+        }
+
         return hash_hmac('sha256', $content, $this->secretKey);
     }
 

@@ -90,102 +90,128 @@ class StudentExporter
      */
     public function exportToZip($studentID, $transferID)
     {
+        // Check for required PHP extensions
+        if (!extension_loaded('zip')) {
+            throw new \RuntimeException('PHP ZIP extension is required for student transfer exports.');
+        }
+
         // Get student data
         $data = $this->exportStudentData($studentID);
 
-        // Create temporary directory
+        // Create temporary directory with proper error handling
         $tempDir = sys_get_temp_dir() . '/student_transfer_' . $transferID;
-        if (!file_exists($tempDir)) {
-            mkdir($tempDir, 0777, true);
+        if (file_exists($tempDir)) {
+            // Clean up any existing temp directory
+            $this->cleanupTempDir($tempDir);
+        }
+        
+        if (!mkdir($tempDir, 0755, true)) {
+            throw new \RuntimeException('Failed to create temporary directory for export.');
         }
 
-        // Create student_data.json
-        $jsonFile = $tempDir . '/student_data.json';
-        file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT));
-
-        // Create metadata.json
-        $metadata = [
-            'exportTimestamp' => date('Y-m-d H:i:s'),
-            'transferID' => $transferID,
-            'sourceSchool' => $this->settingGateway->getSettingByScope('System', 'organisationName'),
-            'version' => '1.0.0'
-        ];
-        $metadataFile = $tempDir . '/metadata.json';
-        file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT));
-
-        // Create manifest.json with checksums and digital signatures
-        $manifest = [
-            'files' => [
-                'student_data.json' => [
-                    'checksum' => hash_file('sha256', $jsonFile),
-                    'signature' => $this->securityService->createDigitalSignature($jsonFile)
-                ],
-                'metadata.json' => [
-                    'checksum' => hash_file('sha256', $metadataFile),
-                    'signature' => $this->securityService->createDigitalSignature($metadataFile)
-                ]
-            ]
-        ];
-        $manifestFile = $tempDir . '/manifest.json';
-        file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT));
-
-        // Generate random password for ZIP
-        $password = $this->securityService->generateSecurePassword();
-
-        // Create password-protected ZIP file
-        $zipFile = $tempDir . '.zip';
-        $zip = new ZipArchive();
-        if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) === true) {
-            // Enable encryption
-            $zip->setPassword($password);
-            
-            // Add files with encryption
-            $zip->setEncryptionName('student_data.json', ZipArchive::EM_AES_256);
-            $zip->setEncryptionName('metadata.json', ZipArchive::EM_AES_256);
-            $zip->setEncryptionName('manifest.json', ZipArchive::EM_AES_256);
-            
-            $zip->addFile($jsonFile, 'student_data.json');
-            $zip->addFile($metadataFile, 'metadata.json');
-            $zip->addFile($manifestFile, 'manifest.json');
-
-            // Add attachments if any
-            if (!empty($data['attachments'])) {
-                $zip->addEmptyDir('attachments');
-                foreach ($data['attachments'] as $attachment) {
-                    if (file_exists($attachment['path'])) {
-                        $zip->setEncryptionName('attachments/' . basename($attachment['path']), ZipArchive::EM_AES_256);
-                        $zip->addFile($attachment['path'], 'attachments/' . basename($attachment['path']));
-                        
-                        // Add attachment signature to manifest
-                        $manifest['files']['attachments/' . basename($attachment['path'])] = [
-                            'checksum' => hash_file('sha256', $attachment['path']),
-                            'signature' => $this->securityService->createDigitalSignature($attachment['path'])
-                        ];
-                    }
-                }
-                // Update manifest with attachment signatures
-                file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT));
-                $zip->addFile($manifestFile, 'manifest.json');
+        try {
+            // Create student_data.json
+            $jsonFile = $tempDir . '/student_data.json';
+            if (file_put_contents($jsonFile, json_encode($data, JSON_PRETTY_PRINT)) === false) {
+                throw new \RuntimeException('Failed to write student data file.');
             }
 
-            $zip->close();
+            // Create metadata.json
+            $metadata = [
+                'exportTimestamp' => date('Y-m-d H:i:s'),
+                'transferID' => $transferID,
+                'sourceSchool' => $this->settingGateway->getSettingByScope('System', 'organisationName'),
+                'version' => '1.0.0'
+            ];
+            $metadataFile = $tempDir . '/metadata.json';
+            if (file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT)) === false) {
+                throw new \RuntimeException('Failed to write metadata file.');
+            }
+
+            // Create manifest.json with checksums and digital signatures
+            $manifest = [
+                'files' => [
+                    'student_data.json' => [
+                        'checksum' => hash_file('sha256', $jsonFile),
+                        'signature' => $this->securityService->createDigitalSignature($jsonFile)
+                    ],
+                    'metadata.json' => [
+                        'checksum' => hash_file('sha256', $metadataFile),
+                        'signature' => $this->securityService->createDigitalSignature($metadataFile)
+                    ]
+                ]
+            ];
+            $manifestFile = $tempDir . '/manifest.json';
+            if (file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT)) === false) {
+                throw new \RuntimeException('Failed to write manifest file.');
+            }
+
+            // Generate random password for ZIP
+            $password = $this->securityService->generateSecurePassword();
+
+            // Create password-protected ZIP file
+            $zipFile = $tempDir . '.zip';
+            $zip = new ZipArchive();
+            $zipResult = $zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+            
+            if ($zipResult !== true) {
+                throw new \RuntimeException('Failed to create ZIP archive: ' . $this->getZipErrorMessage($zipResult));
+            }
+
+            try {
+                // Enable encryption
+                if (!$zip->setPassword($password)) {
+                    throw new \RuntimeException('Failed to set ZIP password. Your PHP ZIP extension may not support encryption.');
+                }
+                
+                // Add files with encryption
+                $zip->setEncryptionName('student_data.json', ZipArchive::EM_AES_256);
+                $zip->setEncryptionName('metadata.json', ZipArchive::EM_AES_256);
+                $zip->setEncryptionName('manifest.json', ZipArchive::EM_AES_256);
+                
+                $zip->addFile($jsonFile, 'student_data.json');
+                $zip->addFile($metadataFile, 'metadata.json');
+                $zip->addFile($manifestFile, 'manifest.json');
+
+                // Add attachments if any
+                if (!empty($data['attachments'])) {
+                    $zip->addEmptyDir('attachments');
+                    foreach ($data['attachments'] as $attachment) {
+                        if (file_exists($attachment['path'])) {
+                            $zip->setEncryptionName('attachments/' . basename($attachment['path']), ZipArchive::EM_AES_256);
+                            $zip->addFile($attachment['path'], 'attachments/' . basename($attachment['path']));
+                            
+                            // Add attachment signature to manifest
+                            $manifest['files']['attachments/' . basename($attachment['path'])] = [
+                                'checksum' => hash_file('sha256', $attachment['path']),
+                                'signature' => $this->securityService->createDigitalSignature($attachment['path'])
+                            ];
+                        }
+                    }
+                    // Update manifest with attachment signatures
+                    file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT));
+                    $zip->addFile($manifestFile, 'manifest.json');
+                }
+            } finally {
+                $zip->close();
+            }
+
+            // Generate download token with error handling
+            $token = $this->securityService->generateDownloadToken($transferID);
+            if (empty($token['token']) || empty($token['expiry'])) {
+                throw new \RuntimeException('Failed to generate download token.');
+            }
+
+            return [
+                'path' => $zipFile,
+                'password' => $password,
+                'token' => $token['token'],
+                'expiry' => $token['expiry']
+            ];
+        } finally {
+            // Clean up temporary files
+            $this->cleanupTempDir($tempDir);
         }
-
-        // Clean up temporary files
-        unlink($jsonFile);
-        unlink($metadataFile);
-        unlink($manifestFile);
-        rmdir($tempDir);
-
-        // Generate download token
-        $token = $this->securityService->generateDownloadToken($transferID);
-
-        return [
-            'path' => $zipFile,
-            'password' => $password,
-            'token' => $token['token'],
-            'expiry' => $token['expiry']
-        ];
     }
 
     /**
@@ -577,5 +603,48 @@ class StudentExporter
         }
 
         return $attendance;
+    }
+
+    /**
+     * Clean up temporary directory and its contents
+     * 
+     * @param string $tempDir Path to temporary directory
+     */
+    private function cleanupTempDir(string $tempDir): void
+    {
+        if (!file_exists($tempDir)) {
+            return;
+        }
+
+        $files = glob($tempDir . '/*');
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                unlink($file);
+            }
+        }
+        rmdir($tempDir);
+    }
+
+    /**
+     * Get human-readable ZIP error message
+     * 
+     * @param int $code ZipArchive error code
+     * @return string Error message
+     */
+    private function getZipErrorMessage(int $code): string
+    {
+        $messages = [
+            ZipArchive::ER_EXISTS => 'File already exists',
+            ZipArchive::ER_INCONS => 'Zip archive inconsistent',
+            ZipArchive::ER_INVAL => 'Invalid argument',
+            ZipArchive::ER_MEMORY => 'Memory allocation failure',
+            ZipArchive::ER_NOENT => 'No such file',
+            ZipArchive::ER_NOZIP => 'Not a zip archive',
+            ZipArchive::ER_OPEN => 'Can\'t open file',
+            ZipArchive::ER_READ => 'Read error',
+            ZipArchive::ER_SEEK => 'Seek error'
+        ];
+        
+        return $messages[$code] ?? 'Unknown error';
     }
 }
