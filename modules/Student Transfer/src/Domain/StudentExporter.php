@@ -207,7 +207,7 @@ class StudentExporter
                 $token = $existingToken['token'];
                 $expiry = $existingToken['expiry'];
             } else {
-                $tokenData = $this->securityService->generatePublicDownloadToken($transferID);
+                $tokenData = $this->securityService->generateDownloadToken($transferID);
                 $token = $tokenData['token'];
                 $expiry = $tokenData['expiry'];
             }

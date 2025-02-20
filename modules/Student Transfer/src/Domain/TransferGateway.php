@@ -428,6 +428,43 @@ public function queryTransfers(QueryCriteria $criteria, $gibbonSchoolYearID = nu
     }
 
     /**
+     * Log a download attempt for security and audit purposes
+     * 
+     * @param string $transferID The transfer ID
+     * @param array $data Download attempt data including:
+     *                    - ipAddress: Client IP address
+     *                    - userAgent: Client user agent
+     *                    - timestamp: Attempt timestamp
+     *                    - status: Download status (e.g. 'Success', 'Invalid Token')
+     *                    - bytesTransferred: Optional bytes transferred
+     *                    - fileSize: Optional total file size
+     * @return bool True if logged successfully
+     */
+    public function logDownloadAttempt($transferID, array $data): bool
+    {
+        try {
+            // Convert status to success boolean
+            $success = isset($data['status']) && $data['status'] === 'Success' ? 1 : 0;
+            
+            $query = $this
+                ->newInsert()
+                ->into('gibbonStudentTransferDownloadLog')
+                ->cols([
+                    'gibbonStudentTransferLogID' => $transferID,
+                    'ipAddress' => $data['ipAddress'] ?? '',
+                    'userAgent' => $data['userAgent'] ?? '',
+                    'timestamp' => $data['timestamp'] ?? date('Y-m-d H:i:s'),
+                    'success' => $success
+                ]);
+
+            return $this->runInsert($query);
+        } catch (\PDOException $e) {
+            error_log('Failed to log download attempt: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Override runDelete to match parent's return type
      */
     protected function runDelete(DeleteInterface $query): bool

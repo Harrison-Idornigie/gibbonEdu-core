@@ -122,15 +122,16 @@ class SecurityService
     {
         $expiry = new \DateTime();
         $expiry->modify("+{$expiryMinutes} minutes");
+        $expiryFormatted = $expiry->format('Y-m-d H:i:s');
 
         $token = hash_hmac('sha256', 
-            $transferID . $expiry->format('Y-m-d H:i:s'),
+            $transferID . $expiryFormatted,
             $this->secretKey
         );
 
         return [
             'token' => $token,
-            'expiry' => $expiry->format('Y-m-d H:i:s')
+            'expiry' => $expiryFormatted
         ];
     }
 
@@ -145,19 +146,26 @@ class SecurityService
      */
     public function verifyDownloadToken($transferID, $token, $expiry)
     {
-        $now = new \DateTime();
-        $expiryDate = new \DateTime($expiry);
+        // Ensure expiry is in correct format
+        try {
+            $now = new \DateTime();
+            $expiryDate = new \DateTime($expiry);
+            $expiryFormatted = $expiryDate->format('Y-m-d H:i:s');
 
-        if ($now > $expiryDate) {
+            if ($now > $expiryDate) {
+                return false;
+            }
+
+            $expectedToken = hash_hmac('sha256',
+                $transferID . $expiryFormatted,
+                $this->secretKey
+            );
+
+            return hash_equals($expectedToken, $token);
+        } catch (\Exception $e) {
+            error_log('Token verification failed: ' . $e->getMessage());
             return false;
         }
-
-        $expectedToken = hash_hmac('sha256',
-            $transferID . $expiry,
-            $this->secretKey
-        );
-
-        return hash_equals($expectedToken, $token);
     }
 
     /**

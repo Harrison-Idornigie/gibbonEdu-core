@@ -90,6 +90,7 @@ $moduleTables = [
         INDEX `gibbonPersonID` (`gibbonPersonID`),
         INDEX `gibbonSchoolYearID` (`gibbonSchoolYearID`),
         INDEX `gibbonPersonIDCreated` (`gibbonPersonIDCreated`),
+        INDEX `downloadToken` (`downloadToken`),
         CONSTRAINT `gibbonStudentTransferLog_ibfk_1` FOREIGN KEY (`gibbonPersonID`) 
             REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE RESTRICT,
         CONSTRAINT `gibbonStudentTransferLog_ibfk_2` FOREIGN KEY (`gibbonSchoolYearID`) 
@@ -125,6 +126,22 @@ $moduleTables = [
         PRIMARY KEY (`gibbonStudentTransferAttachmentID`),
         INDEX `gibbonStudentTransferLogID` (`gibbonStudentTransferLogID`),
         CONSTRAINT `gibbonStudentTransferAttachment_ibfk_1` FOREIGN KEY (`gibbonStudentTransferLogID`) 
+            REFERENCES `gibbonStudentTransferLog` (`gibbonStudentTransferLogID`) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+    "DROP TABLE IF EXISTS `gibbonStudentTransferDownloadLog`",
+    "CREATE TABLE `gibbonStudentTransferDownloadLog` (
+        `gibbonStudentTransferDownloadLogID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
+        `gibbonStudentTransferLogID` INT(12) UNSIGNED ZEROFILL NOT NULL,
+        `ipAddress` VARCHAR(45) NOT NULL,
+        `userAgent` VARCHAR(255) NULL,
+        `timestamp` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `success` TINYINT(1) NOT NULL DEFAULT 0,
+        PRIMARY KEY (`gibbonStudentTransferDownloadLogID`),
+        INDEX `gibbonStudentTransferLogID` (`gibbonStudentTransferLogID`),
+        INDEX `ipAddress` (`ipAddress`),
+        INDEX `timestamp` (`timestamp`),
+        CONSTRAINT `gibbonStudentTransferDownloadLog_ibfk_1` FOREIGN KEY (`gibbonStudentTransferLogID`) 
             REFERENCES `gibbonStudentTransferLog` (`gibbonStudentTransferLogID`) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
 ];

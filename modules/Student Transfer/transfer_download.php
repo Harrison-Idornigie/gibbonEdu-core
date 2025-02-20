@@ -7,11 +7,28 @@ Copyright 2010, Gibbon Foundation
 
 // Module includes - but don't require login
 require_once __DIR__ . '/../../gibbon.php';
-require_once __DIR__ . '/moduleFunctions.php';
+
+// Register module classes for autoloading
+spl_autoload_register(function ($class) {
+    // Only handle our module's classes
+    if (strpos($class, 'Gibbon\\Module\\StudentTransfer\\') === 0) {
+        // Convert namespace to path
+        $path = __DIR__ . '/src/' . str_replace(['Gibbon\\Module\\StudentTransfer\\', '\\'], ['', '/'], $class) . '.php';
+        if (file_exists($path)) {
+            require_once $path;
+        }
+    }
+});
 
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
 use Gibbon\Module\StudentTransfer\Domain\SecurityService;
+
+/**
+ * Handle secure download of student transfer packages.
+ * Implements rate limiting, token verification, and password protection.
+ * Uses chunked file reading to handle large files efficiently.
+ */
 
 // Get request parameters
 $transferID = $_GET['transferID'] ?? '';
@@ -19,7 +36,9 @@ $token = $_GET['token'] ?? '';
 $password = $_GET['password'] ?? '';
 $clientIP = $_SERVER['REMOTE_ADDR'];
 
+// Validate required parameters
 if (empty($transferID) || empty($token)) {
+    error_log("Student Transfer: Invalid download attempt - missing parameters. IP: $clientIP");
     die(__('Invalid download link. Please contact the sending school for assistance.'));
 }
 
@@ -29,25 +48,28 @@ try {
     $transferGateway = new TransferGateway($pdo);
     $securityService = new SecurityService($pdo, $settingGateway);
 
-    // Check rate limiting
+    // Check rate limiting first
     if (!$securityService->checkRateLimit($transferID, $clientIP)) {
+        error_log("Student Transfer: Rate limit exceeded for transfer $transferID from IP: $clientIP");
         die(__('Too many download attempts. Please wait and try again later.'));
     }
 
     // Get the transfer details
     $transfer = $transferGateway->getByID($transferID);
     if (empty($transfer)) {
+        error_log("Student Transfer: Invalid transfer ID $transferID requested from IP: $clientIP");
         die(__('The requested transfer cannot be found.'));
     }
 
-    // Validate the token
-    if (!$securityService->verifyPublicDownloadToken($transferID, $token)) {
+    // Validate the download token
+    if (!$securityService->verifyDownloadToken($transferID, $token, $transfer['downloadExpiry'])) {
         // Log failed attempt
+        error_log("Student Transfer: Invalid token for transfer $transferID from IP: $clientIP");
         $transferGateway->logDownloadAttempt($transferID, [
             'ipAddress' => $clientIP,
             'userAgent' => $_SERVER['HTTP_USER_AGENT'],
             'timestamp' => date('Y-m-d H:i:s'),
-            'status' => 'Invalid Token'
+            'success' => 0
         ]);
         die(__('This download link has expired or is invalid. Please contact the sending school for a new link.'));
     }
@@ -61,6 +83,13 @@ try {
         <head>
             <title><?php echo __('Enter Transfer Password'); ?></title>
             <link rel="stylesheet" href="<?php echo $session->get('absoluteURL'); ?>/themes/Default/css/main.css">
+            <style>
+                .container { max-width: 600px; margin: 50px auto; padding: 20px; }
+                .form-row { margin: 20px 0; }
+                input[type="text"] { width: 200px; padding: 8px; font-size: 16px; }
+                .button { padding: 8px 20px; background: #3B7694; color: white; border: none; cursor: pointer; }
+                .button:hover { background: #2B5B73; }
+            </style>
         </head>
         <body>
             <div class="container">
@@ -71,20 +100,16 @@ try {
                     <input type="hidden" name="transferID" value="<?php echo $transferID; ?>">
                     <input type="hidden" name="token" value="<?php echo $token; ?>">
                     
-                    <div class="row">
-                        <div class="col">
-                            <input type="text" name="password" 
-                                   placeholder="<?php echo __('Enter 6-digit password'); ?>"
-                                   pattern="[0-9]{6}" 
-                                   maxlength="6" 
-                                   required>
-                        </div>
+                    <div class="form-row">
+                        <input type="text" name="password" 
+                               placeholder="<?php echo __('Enter 6-digit password'); ?>"
+                               pattern="[0-9]{6}" 
+                               maxlength="6" 
+                               required>
                     </div>
                     
-                    <div class="row">
-                        <div class="col">
-                            <input type="submit" value="<?php echo __('Download File'); ?>" class="button">
-                        </div>
+                    <div class="form-row">
+                        <input type="submit" value="<?php echo __('Download File'); ?>" class="button">
                     </div>
                 </form>
             </div>
@@ -94,50 +119,49 @@ try {
         exit();
     }
 
-    // Get plain password from database
-    $sql = "SELECT packagePasswordPlain FROM gibbonStudentTransferLog WHERE gibbonStudentTransferLogID = :transferID";
+    // Get plain password from database and verify
+    $sql = "SELECT packagePasswordPlain FROM gibbonStudentTransferLog WHERE gibbonStudentTransferLogID=:transferID";
     $result = $pdo->selectOne($sql, ['transferID' => $transferID]);
     $correctPassword = $result['packagePasswordPlain'] ?? '';
 
-    // Verify password
     if (empty($correctPassword) || $password !== $correctPassword) {
         // Log failed attempt
+        error_log("Student Transfer: Invalid password attempt for transfer $transferID from IP: $clientIP");
         $transferGateway->logDownloadAttempt($transferID, [
             'ipAddress' => $clientIP,
             'userAgent' => $_SERVER['HTTP_USER_AGENT'],
             'timestamp' => date('Y-m-d H:i:s'),
-            'status' => 'Invalid Password'
+            'success' => 0
         ]);
         die(__('Invalid password. Please try again.'));
     }
 
-    // Get the file path and check permissions
+    // Get the file path
     $zipFile = sys_get_temp_dir() . '/student_transfer_' . $transferID . '.zip';
     
+    // Validate file
     if (!file_exists($zipFile)) {
-        error_log("Transfer ZIP file not found: $zipFile");
+        error_log("Student Transfer: ZIP file not found: $zipFile");
         die(__('The transfer file is no longer available. Please contact the sending school to generate a new export.'));
     }
 
     if (!is_readable($zipFile)) {
-        error_log("Transfer ZIP file not readable: $zipFile (Permissions: " . decoct(fileperms($zipFile)) . ")");
+        error_log("Student Transfer: ZIP file not readable: $zipFile (Permissions: " . decoct(fileperms($zipFile)) . ")");
         die(__('Unable to access the transfer file. Please contact your system administrator.'));
     }
 
-    // Check file size
     $fileSize = filesize($zipFile);
     if ($fileSize === false || $fileSize === 0) {
-        error_log("Transfer ZIP file is empty or unreadable: $zipFile");
+        error_log("Student Transfer: ZIP file is empty or unreadable: $zipFile");
         die(__('The transfer file appears to be corrupted. Please contact the sending school to generate a new export.'));
     }
 
-    // Log successful download
+    // Log successful download start
     $transferGateway->logDownloadAttempt($transferID, [
         'ipAddress' => $clientIP,
         'userAgent' => $_SERVER['HTTP_USER_AGENT'],
         'timestamp' => date('Y-m-d H:i:s'),
-        'status' => 'Success',
-        'fileSize' => $fileSize
+        'success' => 1
     ]);
 
     // Set headers for download
@@ -148,16 +172,16 @@ try {
     header('Cache-Control: must-revalidate, post-check=0, pre-check=0');
     header('Expires: 0');
 
-    // Clear any previous output and disable output buffering
+    // Clear output buffers
     while (ob_get_level()) {
         ob_end_clean();
     }
 
-    // Disable max execution time and memory limit for large files
-    set_time_limit(0);
+    // Increase memory and time limits for large files
     ini_set('memory_limit', '256M');
+    set_time_limit(300); // 5 minutes
 
-    // Output file in chunks with error checking
+    // Output file in chunks
     if ($fileHandle = fopen($zipFile, 'rb')) {
         $chunkSize = 8192; // 8KB chunks
         $totalBytesRead = 0;
@@ -165,20 +189,20 @@ try {
         while (!feof($fileHandle)) {
             $buffer = fread($fileHandle, $chunkSize);
             if ($buffer === false) {
-                error_log("Error reading ZIP file at position $totalBytesRead: $zipFile");
+                error_log("Student Transfer: Error reading ZIP file at position $totalBytesRead: $zipFile");
                 break;
             }
             
-            $bytesWritten = print($buffer);
+            $bytesWritten = fwrite(STDOUT, $buffer);
             if ($bytesWritten === false) {
-                error_log("Error writing ZIP file to output at position $totalBytesRead: $zipFile");
+                error_log("Student Transfer: Error writing ZIP file to output at position $totalBytesRead: $zipFile");
                 break;
             }
             
             $totalBytesRead += strlen($buffer);
             
             if (connection_status() != 0) {
-                error_log("Connection lost during download at position $totalBytesRead: $zipFile");
+                error_log("Student Transfer: Connection lost during download at position $totalBytesRead: $zipFile");
                 break;
             }
             
@@ -187,14 +211,22 @@ try {
         
         fclose($fileHandle);
 
-        // Log if download was incomplete
-        if ($totalBytesRead < $fileSize) {
-            error_log("Incomplete download: $totalBytesRead of $fileSize bytes transferred for file: $zipFile");
+        // Log download completion
+        if ($totalBytesRead === $fileSize) {
             $transferGateway->logDownloadAttempt($transferID, [
                 'ipAddress' => $clientIP,
                 'userAgent' => $_SERVER['HTTP_USER_AGENT'],
                 'timestamp' => date('Y-m-d H:i:s'),
-                'status' => 'Incomplete',
+                'success' => 1,
+                'bytesTransferred' => $totalBytesRead
+            ]);
+        } else {
+            error_log("Student Transfer: Incomplete download - $totalBytesRead of $fileSize bytes for transfer $transferID");
+            $transferGateway->logDownloadAttempt($transferID, [
+                'ipAddress' => $clientIP,
+                'userAgent' => $_SERVER['HTTP_USER_AGENT'],
+                'timestamp' => date('Y-m-d H:i:s'),
+                'success' => 0,
                 'bytesTransferred' => $totalBytesRead,
                 'fileSize' => $fileSize
             ]);
@@ -203,10 +235,10 @@ try {
         exit();
     }
 
-    error_log("Failed to open ZIP file for reading: $zipFile (Permissions: " . decoct(fileperms($zipFile)) . ")");
+    error_log("Student Transfer: Failed to open ZIP file: $zipFile (Permissions: " . decoct(fileperms($zipFile)) . ")");
     die(__('Failed to download the file. Please try again or contact the sending school.'));
+
 } catch (\Exception $e) {
-    // Log the error
     error_log('Student Transfer Download Error: ' . $e->getMessage());
     die(__('An error occurred while processing your download. Please try again or contact the sending school.'));
 }
