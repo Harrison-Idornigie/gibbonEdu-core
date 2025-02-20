@@ -151,8 +151,10 @@ class StudentExporter
             // Generate or reuse password
             if ($existingPassword && !empty($existingPassword['plain'])) {
                 $password = $existingPassword['plain'];
+                error_log("Student Transfer Debug: Reusing existing password for transfer $transferID: $password");
             } else {
                 $password = $this->securityService->generateSecurePassword();
+                error_log("Student Transfer Debug: Generated new password for transfer $transferID: $password");
             }
             
             // Create password-protected ZIP file

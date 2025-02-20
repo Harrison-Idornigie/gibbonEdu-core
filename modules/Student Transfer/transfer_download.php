@@ -31,9 +31,9 @@ use Gibbon\Module\StudentTransfer\Domain\SecurityService;
  */
 
 // Get request parameters
-$transferID = $_GET['transferID'] ?? '';
-$token = $_GET['token'] ?? '';
-$password = $_GET['password'] ?? '';
+$transferID = $_REQUEST['transferID'] ?? '';  // Check both GET and POST
+$token = $_REQUEST['token'] ?? '';  // Check both GET and POST
+$password = $_POST['password'] ?? '';  // Check POST for password
 $clientIP = $_SERVER['REMOTE_ADDR'];
 
 // Validate required parameters
@@ -96,7 +96,7 @@ try {
                 <h2><?php echo __('Student Transfer Download'); ?></h2>
                 <p><?php echo __('Please enter the password provided by the sending school.'); ?></p>
                 
-                <form method="get" action="">
+                <form method="post" action="<?php echo $_SERVER['REQUEST_URI']; ?>">
                     <input type="hidden" name="transferID" value="<?php echo $transferID; ?>">
                     <input type="hidden" name="token" value="<?php echo $token; ?>">
                     
@@ -109,7 +109,7 @@ try {
                     </div>
                     
                     <div class="form-row">
-                        <input type="submit" value="<?php echo __('Download File'); ?>" class="button">
+                        <button type="submit" class="button"><?php echo __('Download File'); ?></button>
                     </div>
                 </form>
             </div>
@@ -120,9 +120,14 @@ try {
     }
 
     // Get plain password from database and verify
-    $sql = "SELECT packagePasswordPlain FROM gibbonStudentTransferLog WHERE gibbonStudentTransferLogID=:transferID";
-    $result = $pdo->selectOne($sql, ['transferID' => $transferID]);
-    $correctPassword = $result['packagePasswordPlain'] ?? '';
+    $transfer = $transferGateway->getByID($transferID);
+    $correctPassword = $transfer['packagePasswordPlain'] ?? '';
+
+    // Debug logging
+    error_log("Student Transfer Debug: Comparing passwords for transfer $transferID");
+    error_log("Student Transfer Debug: Entered password: " . $password);
+    error_log("Student Transfer Debug: Stored password: " . $correctPassword);
+    error_log("Student Transfer Debug: Transfer record: " . json_encode($transfer));
 
     if (empty($correctPassword) || $password !== $correctPassword) {
         // Log failed attempt
@@ -133,7 +138,50 @@ try {
             'timestamp' => date('Y-m-d H:i:s'),
             'success' => 0
         ]);
-        die(__('Invalid password. Please try again.'));
+        
+        // Show error message and password form again
+        ?>
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title><?php echo __('Enter Transfer Password'); ?></title>
+            <link rel="stylesheet" href="<?php echo $session->get('absoluteURL'); ?>/themes/Default/css/main.css">
+            <style>
+                .container { max-width: 600px; margin: 50px auto; padding: 20px; }
+                .form-row { margin: 20px 0; }
+                input[type="text"] { width: 200px; padding: 8px; font-size: 16px; }
+                .button { padding: 8px 20px; background: #3B7694; color: white; border: none; cursor: pointer; }
+                .button:hover { background: #2B5B73; }
+                .error { color: #cc0000; margin-bottom: 20px; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h2><?php echo __('Student Transfer Download'); ?></h2>
+                <p class="error"><?php echo __('Invalid password. Please try again.'); ?></p>
+                <p><?php echo __('Please enter the password provided by the sending school.'); ?></p>
+                
+                <form method="post" action="<?php echo $_SERVER['REQUEST_URI']; ?>">
+                    <input type="hidden" name="transferID" value="<?php echo $transferID; ?>">
+                    <input type="hidden" name="token" value="<?php echo $token; ?>">
+                    
+                    <div class="form-row">
+                        <input type="text" name="password" 
+                               placeholder="<?php echo __('Enter 6-digit password'); ?>"
+                               pattern="[0-9]{6}" 
+                               maxlength="6" 
+                               required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <button type="submit" class="button"><?php echo __('Download File'); ?></button>
+                    </div>
+                </form>
+            </div>
+        </body>
+        </html>
+        <?php
+        exit();
     }
 
     // Get the file path
@@ -193,12 +241,7 @@ try {
                 break;
             }
             
-            $bytesWritten = fwrite(STDOUT, $buffer);
-            if ($bytesWritten === false) {
-                error_log("Student Transfer: Error writing ZIP file to output at position $totalBytesRead: $zipFile");
-                break;
-            }
-            
+            echo $buffer;  
             $totalBytesRead += strlen($buffer);
             
             if (connection_status() != 0) {

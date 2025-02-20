@@ -68,11 +68,14 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
             $page->addError(__('The specified record cannot be found.'));
         } else {
             // Check if transfer is in correct state for import
-            if ($transfer['status'] != 'Exported') {
+            if ($transfer['status'] != 'Pending Import') {
                 $page->addError(__('This transfer cannot be imported in its current state.'));
             } else {
+                // Load student data
+                $studentData = $transfer['studentData'];
+                
                 // Check for duplicates
-                $duplicates = $importProcessor->checkDuplicates($transfer['studentData']);
+                $duplicates = $importProcessor->checkDuplicates($studentData);
                 
                 // Show preview and confirmation form
                 $form = Form::create('confirmImport', $session->get('absoluteURL').'/modules/Student Transfer/transfer_manage_importProcess.php');
@@ -100,122 +103,125 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
                     }
                 }
 
-                // STUDENT DETAILS
-                $row = $form->addRow()->addHeading(__('Student Details'))
-                    ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                    ->addClass('toggleDetails')
-                    ->addClass('font-bold');
+                // DATA PREVIEW
+                $row = $form->addRow()->addHeading(__('Student Data Preview'));
 
-                // Display student data preview
-                $studentData = json_decode($transfer['exportData'], true);
-                
+                // Personal Information
                 $row = $form->addRow();
-                    $row->addLabel('name', __('Student Name'));
-                    $row->addTextField('name')
-                        ->setValue(Format::name('', $studentData['personal']['preferredName'], $studentData['personal']['surname'], 'Student'))
-                        ->readonly();
-
-                $row = $form->addRow();
-                    $row->addLabel('dob', __('Date of Birth'));
-                    $row->addDate('dob')
-                        ->setValue($studentData['personal']['dob'])
-                        ->readonly();
-
-                // Add collapsible sections for different data types
-                $types = [
-                    'Academic Records' => 'academic',
-                    'Medical Information' => 'medical',
-                    'Family Details' => 'family',
-                    'Custom Fields' => 'custom'
-                ];
-
-                foreach ($types as $title => $key) {
-                    $row = $form->addRow();
-                    $row->addHeading(__($title))
+                    $row->addHeading(__('Personal Information'))
                         ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                        ->addClass('toggleDetails')
-                        ->addClass('font-bold');
+                        ->addClass('toggleDetails');
 
-                    $row = $form->addRow()->addClass(strtolower(str_replace(' ', '', $title)));
-                        $column = $row->addColumn()->addClass('flex-col');
-                        
-                        // Add preview content based on data type
-                        switch ($key) {
-                            case 'academic':
-                                foreach ($studentData[$key]['enrolments'] as $enrolment) {
-                                    $column->addContent($enrolment['schoolYear'].' - '.$enrolment['yearGroup'])
-                                        ->addClass('py-2');
-                                }
-                                break;
-                                
-                            case 'medical':
-                                foreach ($studentData[$key]['conditions'] as $condition) {
-                                    $column->addContent($condition['name'].': '.$condition['details'])
-                                        ->addClass('py-2');
-                                }
-                                break;
-                                
-                            case 'family':
-                                foreach ($studentData[$key]['adults'] as $adult) {
-                                    $column->addContent(Format::name($adult['title'], $adult['preferredName'], $adult['surname'], 'Parent').' ('.$adult['relationship'].')')
-                                        ->addClass('py-2');
-                                }
-                                break;
-                                
-                            case 'custom':
-                                foreach ($studentData[$key] as $field => $data) {
-                                    $column->addContent($field.': '.($data['type'] == 'multiSelect' ? implode(', ', $data['value']) : $data['value']))
-                                        ->addClass('py-2');
-                                }
-                                break;
-                        }
+                $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
+                
+                $row = $table->addRow();
+                    $row->addLabel('name', __('Name'));
+                    $row->addContent(Format::name('', $studentData['preferredName'], $studentData['surname'], 'Student'));
+
+                $row = $table->addRow();
+                    $row->addLabel('dob', __('Date of Birth'));
+                    $row->addContent(Format::date($studentData['dob']));
+
+                $row = $table->addRow();
+                    $row->addLabel('gender', __('Gender'));
+                    $row->addContent($studentData['gender']);
+
+                $row = $table->addRow();
+                    $row->addLabel('email', __('Email'));
+                    $row->addContent($studentData['email']);
+
+                // Academic Information
+                $row = $form->addRow();
+                    $row->addHeading(__('Academic Information'))
+                        ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
+                        ->addClass('toggleDetails');
+
+                $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
+                
+                foreach ($studentData['academic']['enrolments'] as $enrolment) {
+                    $row = $table->addRow();
+                        $row->addLabel('school', __('School'));
+                        $row->addContent($enrolment['schoolName']);
+                    
+                    $row = $table->addRow();
+                        $row->addLabel('yearGroup', __('Year Group'));
+                        $row->addContent($enrolment['yearGroup']);
+                    
+                    $row = $table->addRow();
+                        $row->addLabel('dates', __('Dates'));
+                        $row->addContent(Format::date($enrolment['dateStart']).' - '.Format::date($enrolment['dateEnd']));
                 }
 
-                // IMPORT OPTIONS
-                $row = $form->addRow()->addHeading(__('Import Options'))
-                    ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                    ->addClass('toggleDetails')
-                    ->addClass('font-bold');
-
-                $row = $form->addRow();
-                    $row->addLabel('createApplicationForm', __('Create Application Form'))
-                        ->description(__('Create an application form for review before final import.'));
-                    $row->addYesNo('createApplicationForm')
-                        ->selected('Y')
-                        ->required();
-
-                $row = $form->addRow();
-                    $row->addLabel('importAttachments', __('Import Attachments'))
-                        ->description(__('Import all attached files and documents.'));
-                    $row->addYesNo('importAttachments')
-                        ->selected('Y')
-                        ->required();
-
-                if (!empty($duplicates)) {
+                // Medical Information
+                if (!empty($studentData['medical'])) {
                     $row = $form->addRow();
-                        $row->addLabel('ignoreDuplicates', __('Ignore Duplicates'))
-                            ->description(__('Proceed with import despite potential duplicates.'));
-                        $row->addYesNo('ignoreDuplicates')
-                            ->selected('N')
-                            ->required();
+                        $row->addHeading(__('Medical Information'))
+                            ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
+                            ->addClass('toggleDetails');
+
+                    $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
+                    
+                    foreach ($studentData['medical']['conditions'] as $condition) {
+                        $row = $table->addRow();
+                            $row->addLabel('condition', __('Condition'));
+                            $row->addContent($condition['name']);
+                        
+                        $row = $table->addRow();
+                            $row->addLabel('details', __('Details'));
+                            $row->addContent($condition['details']);
+                    }
                 }
 
-                // CONFIRMATION
-                $row = $form->addRow()->addHeading(__('Confirmation'))
-                    ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                    ->addClass('toggleDetails')
-                    ->addClass('font-bold');
+                // Family Information
+                if (!empty($studentData['family'])) {
+                    $row = $form->addRow();
+                        $row->addHeading(__('Family Information'))
+                            ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
+                            ->addClass('toggleDetails');
 
+                    $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
+                    
+                    foreach ($studentData['family'] as $family) {
+                        $row = $table->addRow();
+                            $row->addLabel('relation', __('Relation'));
+                            $row->addContent($family['relation']);
+                        
+                        $row = $table->addRow();
+                            $row->addLabel('name', __('Name'));
+                            $row->addContent(Format::name('', $family['preferredName'], $family['surname'], 'Parent'));
+                        
+                        $row = $table->addRow();
+                            $row->addLabel('contact', __('Contact'));
+                            $row->addContent($family['email'].'<br/>'.$family['phone']);
+                    }
+                }
+
+                // Attachments
+                $attachmentDir = $session->get('absolutePath').'/uploads/studentTransfers/'.$studentTransferLogID;
+                if (is_dir($attachmentDir)) {
+                    $row = $form->addRow();
+                        $row->addHeading(__('Attachments'))
+                            ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
+                            ->addClass('toggleDetails');
+
+                    $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
+                    
+                    foreach (glob($attachmentDir.'/*.*') as $file) {
+                        $row = $table->addRow();
+                            $row->addLabel('file', __('File'));
+                            $row->addContent(basename($file));
+                    }
+                }
+
+                // Confirmation
                 $row = $form->addRow();
-                    $row->addLabel('confirm', __('Confirm Import'))
-                        ->description(__('Are you sure you want to import this student data?'));
-                    $row->addCheckbox('confirm')
-                        ->description(__('Yes'))
-                        ->required();
+                    $row->addContent(__('Are you sure you want to import this student? This will create a new application form.'))
+                        ->wrap('<p class="mt-3">', '</p>')
+                        ->addClass('text-warning font-bold');
 
                 $row = $form->addRow();
                     $row->addFooter();
-                    $row->addSubmit();
+                    $row->addSubmit(__('Import Student'));
 
                 echo $form->getOutput();
             }

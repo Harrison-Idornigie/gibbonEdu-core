@@ -12,7 +12,6 @@ use Gibbon\Domain\System\NotificationGateway;
 use Gibbon\Domain\User\UserGateway;
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Contracts\Database\Connection;
-use Gibbon\Services\Format;
 
 /**
  * Notification Service
@@ -49,125 +48,145 @@ class NotificationService
      * @param string $moduleName Module name
      * @param string $actionLink Action link
      */
-    protected function sendNotification($users, $text, $moduleName, $actionLink)
+    public function sendNotification($users, $text, $moduleName, $actionLink)
     {
-        foreach ($users as $user) {
-            $data = [
-                'gibbonPersonID' => $user['gibbonPersonID'],
+        foreach ($users as $gibbonPersonID) {
+            $this->notificationGateway->insert([
+                'gibbonPersonID' => $gibbonPersonID,
                 'text' => $text,
                 'moduleName' => $moduleName,
                 'actionLink' => $actionLink
-            ];
-
-            $this->notificationGateway->insert($data);
+            ]);
         }
     }
 
     /**
      * Send a transfer request notification.
      *
-     * @param array $transfer Transfer details
-     * @param string $actionBy gibbonPersonID of the user initiating the action
+     * @param string $transferID
+     * @param string $type upload|import|approve|reject
+     * @param array $data Additional data for notification
      */
-    public function sendTransferRequestNotification($transfer, $actionBy)
+    public function sendTransferNotification($transferID, $type, array $data = [])
     {
-        // Get users with permission to handle transfers
-        $users = $this->getUsersByPermission('Student Transfer_manage');
-
-        $actionByUser = $this->userGateway->getByID($actionBy);
-        $student = $this->userGateway->getByID($transfer['gibbonPersonID']);
-        
-        $text = sprintf(
-            __('New student transfer request for %s initiated by %s.'),
-            Format::name('', $student['preferredName'], $student['surname'], 'Student'),
-            Format::name('', $actionByUser['preferredName'], $actionByUser['surname'], 'Staff')
-        );
-
-        $this->sendNotification($users, $text, 'Student Transfer', 'transfer_manage.php');
-    }
-
-    /**
-     * Send a transfer status update notification.
-     *
-     * @param array $transfer Transfer details
-     * @param string $oldStatus Previous status
-     * @param string $newStatus New status
-     * @param string $actionBy gibbonPersonID of the user making the change
-     */
-    public function sendStatusUpdateNotification($transfer, $oldStatus, $newStatus, $actionBy)
-    {
-        $actionByUser = $this->userGateway->getByID($actionBy);
-        $student = $this->userGateway->getByID($transfer['gibbonPersonID']);
-
-        // Notify relevant staff members
-        $users = $this->getUsersByPermission('Student Transfer_manage');
-        
-        $text = sprintf(
-            __('Student transfer status for %s changed from %s to %s by %s.'),
-            Format::name('', $student['preferredName'], $student['surname'], 'Student'),
-            __($oldStatus),
-            __($newStatus),
-            Format::name('', $actionByUser['preferredName'], $actionByUser['surname'], 'Staff')
-        );
-
-        $this->sendNotification($users, $text, 'Student Transfer', 'transfer_manage.php');
-    }
-
-    /**
-     * Send a transfer package expiry notification.
-     *
-     * @param array $transfer Transfer details
-     */
-    public function sendExpiryNotification($transfer)
-    {
-        $student = $this->userGateway->getByID($transfer['gibbonPersonID']);
-        $users = $this->getUsersByPermission('Student Transfer_manage');
-
-        $text = sprintf(
-            __('Transfer package for %s will expire in 24 hours.'),
-            Format::name('', $student['preferredName'], $student['surname'], 'Student')
-        );
-
-        $this->sendNotification($users, $text, 'Student Transfer', 'transfer_manage.php');
-    }
-
-    /**
-     * Send a batch transfer completion notification.
-     *
-     * @param array $results Batch transfer results
-     * @param string $actionBy gibbonPersonID of the user who initiated the batch
-     */
-    public function sendBatchCompletionNotification($results, $actionBy)
-    {
-        $actionByUser = $this->userGateway->getByID($actionBy);
-        $users = $this->getUsersByPermission('Student Transfer_manage');
-
-        $text = sprintf(
-            __('Batch transfer completed by %s. Success: %d, Failed: %d'),
-            Format::name('', $actionByUser['preferredName'], $actionByUser['surname'], 'Staff'),
-            $results['success'],
-            $results['failed']
-        );
-
-        $this->sendNotification($users, $text, 'Student Transfer', 'transfer_manage.php');
-    }
-
-    /**
-     * Get users with a specific permission.
-     *
-     * @param string $action The action to check permission for
-     * @return array Array of user IDs
-     */
-    protected function getUsersByPermission($action)
-    {
-        $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID 
+        // Get staff with Student Transfer access
+        $sql = "SELECT gibbonPerson.gibbonPersonID, gibbonRole.category 
                 FROM gibbonPerson 
-                JOIN gibbonRole ON (FIND_IN_SET(gibbonRole.gibbonRoleID, gibbonPerson.gibbonRoleIDAll))
-                JOIN gibbonPermission ON (gibbonRole.gibbonRoleID=gibbonPermission.gibbonRoleID)
-                JOIN gibbonAction ON (gibbonPermission.gibbonActionID=gibbonAction.gibbonActionID)
-                WHERE gibbonAction.name=:action 
+                JOIN gibbonRole ON (gibbonRole.gibbonRoleID=gibbonPerson.gibbonRoleIDPrimary)
+                JOIN gibbonPermission ON (gibbonPermission.gibbonRoleID=gibbonRole.gibbonRoleID)
+                JOIN gibbonAction ON (gibbonAction.gibbonActionID=gibbonPermission.gibbonActionID)
+                WHERE gibbonAction.name='Manage Student Transfers'
+                AND gibbonAction.gibbonModuleID=(SELECT gibbonModuleID FROM gibbonModule WHERE name='Student Transfer')
                 AND gibbonPerson.status='Full'";
+        
+        $staff = $this->pdo->select($sql)->fetchAll();
+        if (empty($staff)) return;
 
-        return $this->pdo->select($sql, ['action' => $action])->fetchAll();
+        $actionLink = '/index.php?q=/modules/Student Transfer/transfer_manage.php';
+        $moduleName = 'Student Transfer';
+
+        switch ($type) {
+            case 'upload':
+                $text = __('A new student transfer package has been uploaded.');
+                if (!empty($data['schoolName'])) {
+                    $text .= ' '.__('From').': '.$data['schoolName'];
+                }
+                break;
+
+            case 'import':
+                $text = __('A student transfer has been imported.');
+                if (!empty($data['applicationID'])) {
+                    $actionLink = '/index.php?q=/modules/Students/applicationForm_manage_edit.php&gibbonApplicationFormID='.$data['applicationID'];
+                }
+                break;
+
+            case 'approve':
+                $text = __('A student transfer has been approved.');
+                break;
+
+            case 'reject':
+                $text = __('A student transfer has been rejected.');
+                if (!empty($data['reason'])) {
+                    $text .= ' '.__('Reason').': '.$data['reason'];
+                }
+                break;
+
+            default:
+                return;
+        }
+
+        // Send to all staff with access
+        $users = array_column($staff, 'gibbonPersonID');
+        $this->sendNotification($users, $text, $moduleName, $actionLink);
+
+        // Additional notifications for specific roles
+        foreach ($staff as $member) {
+            if ($member['category'] == 'Staff' && $type == 'import') {
+                // Send additional details to admin staff
+                $detailedText = __('Please review the imported student application.');
+                $this->sendNotification(
+                    [$member['gibbonPersonID']], 
+                    $detailedText,
+                    $moduleName,
+                    $actionLink
+                );
+            }
+        }
+    }
+
+    /**
+     * Notify previous school about transfer status.
+     *
+     * @param string $transferID
+     * @param string $status
+     * @param string $message
+     */
+    public function notifyPreviousSchool($transferID, $status, $message = '')
+    {
+        // Get transfer record
+        $sql = "SELECT * FROM gibbonStudentTransferLog WHERE gibbonStudentTransferLogID=:transferID";
+        $transfer = $this->pdo->selectOne($sql, ['transferID' => $transferID]);
+        if (empty($transfer)) return;
+
+        // Get notification settings
+        $notifyPreviousSchool = $this->settingGateway->getSettingByScope(
+            'Student Transfer',
+            'notifyPreviousSchool'
+        );
+
+        if ($notifyPreviousSchool != 'Y') return;
+
+        // Get email template
+        $template = $this->getEmailTemplate($status);
+        if (empty($template)) return;
+
+        // Replace placeholders
+        $template = str_replace('{school_name}', $transfer['schoolNameTo'], $template);
+        $template = str_replace('{status}', $status, $template);
+        $template = str_replace('{message}', $message, $template);
+
+        // Send email
+        // Note: This would need to be implemented based on your email system
+        // For now, we'll just log it
+        error_log("Student Transfer: Would send email to {$transfer['schoolNameFrom']}");
+        error_log("Subject: Student Transfer Status Update");
+        error_log("Body: $template");
+    }
+
+    /**
+     * Get email template for status.
+     *
+     * @param string $status
+     * @return string
+     */
+    protected function getEmailTemplate($status)
+    {
+        $templates = [
+            'Imported' => "Dear {school_name},\n\nThe student transfer package has been successfully imported.\n\n{message}",
+            'Approved' => "Dear {school_name},\n\nThe student transfer has been approved.\n\n{message}",
+            'Rejected' => "Dear {school_name},\n\nThe student transfer has been rejected.\n\nReason: {message}"
+        ];
+
+        return $templates[$status] ?? '';
     }
 }

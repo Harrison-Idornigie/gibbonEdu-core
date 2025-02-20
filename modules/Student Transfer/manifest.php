@@ -199,6 +199,25 @@ $actionRows = [
         'categoryPermissionOther' => 'N'
     ],
     [
+        'name' => 'Import Student Transfer',
+        'precedence' => '0',
+        'category' => 'Student Data',
+        'description' => 'Import student data from transfer packages.',
+        'URLList' => 'transfer_manage_import.php',
+        'entryURL' => 'transfer_manage_import.php',
+        'entrySidebar' => 'Y',
+        'menuShow' => 'Y',
+        'defaultPermissionAdmin' => 'Y',
+        'defaultPermissionTeacher' => 'N',
+        'defaultPermissionStudent' => 'N',
+        'defaultPermissionParent' => 'N',
+        'defaultPermissionSupport' => 'N',
+        'categoryPermissionStaff' => 'Y',
+        'categoryPermissionStudent' => 'N',
+        'categoryPermissionParent' => 'N',
+        'categoryPermissionOther' => 'N'
+    ],
+    [
         'name' => 'Student Transfer Settings',
         'precedence' => '1',
         'category' => 'Admin',
