@@ -86,19 +86,13 @@ class SecurityService
      * Generate a secure random password for ZIP encryption.
      * Uses cryptographically secure random number generator.
      *
-     * @param int $length Length of the password (default: 16)
-     * @return string The generated password
+     * @return string The generated 6-digit password
      */
-    public function generateSecurePassword($length = 16)
+    public function generateSecurePassword()
     {
-        $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?';
-        $password = '';
-        
-        for ($i = 0; $i < $length; $i++) {
-            $password .= $chars[random_int(0, strlen($chars) - 1)];
-        }
-        
-        return $password;
+        $min = 100000; // Minimum 6-digit number
+        $max = 999999; // Maximum 6-digit number
+        return (string) random_int($min, $max);
     }
 
     /**
@@ -164,5 +158,100 @@ class SecurityService
         );
 
         return hash_equals($expectedToken, $token);
+    }
+
+    /**
+     * Generate a secure download token for public access.
+     * Used to create temporary secure download links that can be accessed without login.
+     *
+     * @param string $transferID The transfer ID
+     * @param int $expiryHours Hours until token expires (default: 48)
+     * @return array Token data including download URL
+     */
+    public function generatePublicDownloadToken($transferID, $expiryHours = 48)
+    {
+        $expiry = new \DateTime();
+        $expiry->modify("+{$expiryHours} hours");
+
+        // Create a more complex token that includes transfer metadata
+        $tokenData = [
+            'id' => $transferID,
+            'exp' => $expiry->getTimestamp(),
+            'iat' => time(),
+            'nonce' => bin2hex(random_bytes(16))
+        ];
+
+        // Sign the token with our secret key
+        $token = hash_hmac('sha256', 
+            json_encode($tokenData),
+            $this->secretKey
+        );
+
+        return [
+            'token' => $token,
+            'expiry' => $expiry->format('Y-m-d H:i:s'),
+            'tokenData' => $tokenData
+        ];
+    }
+
+    /**
+     * Verify a public download token.
+     * Used to validate temporary download links that don't require login.
+     *
+     * @param string $transferID The transfer ID
+     * @param string $token The token to verify
+     * @return bool True if token is valid and not expired
+     */
+    public function verifyPublicDownloadToken($transferID, $token)
+    {
+        try {
+            // Get token data from database
+            $sql = "SELECT downloadToken, downloadExpiry FROM gibbonStudentTransferLog 
+                   WHERE gibbonStudentTransferLogID = :transferID";
+            $result = $this->pdo->selectOne($sql, ['transferID' => $transferID]);
+
+            if (empty($result) || empty($result['downloadToken']) || empty($result['downloadExpiry'])) {
+                return false;
+            }
+
+            // Check expiry
+            $expiry = new \DateTime($result['downloadExpiry']);
+            $now = new \DateTime();
+            if ($now > $expiry) {
+                return false;
+            }
+
+            // Verify token
+            return hash_equals($result['downloadToken'], $token);
+        } catch (\Exception $e) {
+            return false;
+        }
+    }
+
+    /**
+     * Rate limit download attempts.
+     * Prevents brute force attempts on the download URL.
+     *
+     * @param string $transferID The transfer ID
+     * @param string $ipAddress The client IP address
+     * @return bool True if allowed, false if rate limited
+     */
+    public function checkRateLimit($transferID, $ipAddress)
+    {
+        $timeWindow = 3600; // 1 hour
+        $maxAttempts = 10;  // Maximum attempts per hour
+
+        $sql = "SELECT COUNT(*) as attempts 
+                FROM gibbonStudentTransferDownloadLog 
+                WHERE gibbonStudentTransferLogID = :transferID 
+                AND ipAddress = :ipAddress 
+                AND timestamp > DATE_SUB(NOW(), INTERVAL 1 HOUR)";
+        
+        $result = $this->pdo->selectOne($sql, [
+            'transferID' => $transferID,
+            'ipAddress' => $ipAddress
+        ]);
+
+        return ($result['attempts'] ?? 0) < $maxAttempts;
     }
 }

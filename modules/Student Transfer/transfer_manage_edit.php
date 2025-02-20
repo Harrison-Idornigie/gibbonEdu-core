@@ -9,6 +9,7 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 use Gibbon\Forms\Form;
 use Gibbon\Services\Format;
 use Gibbon\Tables\DataTable;
+use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
 
@@ -58,6 +59,7 @@ $page->breadcrumbs
 
 // Get student info
 $studentGateway = $container->get(StudentGateway::class);
+$settingGateway = $container->get(SettingGateway::class);
 
 // First try to get active student
 $student = $studentGateway->getByID($transfer['gibbonPersonID']);
@@ -112,6 +114,34 @@ $row->addHeading(__('Transfer Details'))
 $row = $form->addRow();
 $row->addContent(__('Edit the transfer details.'))
     ->wrap('<div class="text-gray-600 text-sm mt-2">', '</div>');
+
+// Get destination schools from settings
+$destinationSchools = array_map('trim', explode(',', $settingGateway->getSettingByScope('Student Transfer', 'destinationSchools')));
+$destinationSchoolOptions = array_combine($destinationSchools, $destinationSchools);
+
+$row = $form->addRow();
+    $row->addLabel('schoolNameFrom', __('Source School'))
+        ->description(__('The school the student is transferring from'));
+    $row->addTextField('schoolNameFrom')
+        ->setValue($transfer['schoolNameFrom'])
+        ->readonly();
+
+$row = $form->addRow();
+    $row->addLabel('schoolNameTo', __('Destination School'))
+        ->description(__('Select the receiving school'));
+    if (!empty($destinationSchoolOptions)) {
+        $row->addSelect('schoolNameTo')
+            ->fromArray($destinationSchoolOptions)
+            ->required()
+            ->placeholder()
+            ->selected($transfer['schoolNameTo']);
+    } else {
+        $row->addTextField('schoolNameTo')
+            ->required()
+            ->maxLength(100)
+            ->setValue($transfer['schoolNameTo'])
+            ->placeholder(__('No schools configured in settings'));
+    }
 
 $row = $form->addRow();
 $row->addLabel('status', __('Status'));

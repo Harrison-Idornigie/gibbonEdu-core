@@ -83,6 +83,10 @@ $row = $form->addRow();
         ->required()
         ->placeholder();
 
+// Get destination schools from settings
+$destinationSchools = array_map('trim', explode(',', $settingGateway->getSettingByScope('Student Transfer', 'destinationSchools')));
+$destinationSchoolOptions = array_combine($destinationSchools, $destinationSchools);
+
 // Transfer Details
 $form->addRow()->addHeading(__('Transfer Details'));
 $row = $form->addRow();
@@ -94,10 +98,18 @@ $row = $form->addRow();
 
 $row = $form->addRow();
     $row->addLabel('schoolNameTo', __('Destination School'))
-        ->description(__('Enter the name of the receiving school'));
-    $row->addTextField('schoolNameTo')
-        ->required()
-        ->maxLength(100);
+        ->description(__('Select the receiving school'));
+    if (!empty($destinationSchoolOptions)) {
+        $row->addSelect('schoolNameTo')
+            ->fromArray($destinationSchoolOptions)
+            ->required()
+            ->placeholder();
+    } else {
+        $row->addTextField('schoolNameTo')
+            ->required()
+            ->maxLength(100)
+            ->placeholder(__('No schools configured in settings'));
+    }
 
 $row = $form->addRow();
     $row->addLabel('notes', __('Notes'))

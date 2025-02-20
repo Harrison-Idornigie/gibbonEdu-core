@@ -84,6 +84,7 @@ echo $form->getOutput();
 $table = DataTable::create('studentTransfers');
 $table->setTitle(__('Student Transfers'));
 $table->setDescription(__('View and manage student transfers between schools.'));
+$table->addMetaData('gibbonSchoolYearID', $gibbonSchoolYearID);
 
 // Add bulk actions if batch transfers enabled
 if ($session->get('isAdmin') && $settingGateway->getSettingByScope('Student Transfer', 'enableBatchTransfers') == 'Y') {
@@ -167,24 +168,28 @@ $table->addColumn('status', __('Status'))
 $table->addActionColumn()
     ->addParam('gibbonStudentTransferLogID')
     ->addParam('gibbonSchoolYearID', $gibbonSchoolYearID)
-    ->format(function ($row, $actions) {
+    ->format(function ($row, $actions) use ($gibbonSchoolYearID) {
         $actions->addAction('edit', __('Edit'))
-            ->setURL('/modules/Student Transfer/transfer_manage_edit.php');
+            ->setURL('/modules/Student Transfer/transfer_manage_edit.php')
+            ->addParam('gibbonSchoolYearID', $gibbonSchoolYearID);
 
         if ($row['status'] == 'Pending') {
             $actions->addAction('export', __('Export'))
                 ->setURL('/modules/Student Transfer/transfer_manage_export.php')
+                ->addParam('gibbonSchoolYearID', $gibbonSchoolYearID)
                 ->setIcon('delivery2');
         }
 
         if ($row['status'] == 'Exported') {
             $actions->addAction('download', __('Download'))
-                ->setURL('/modules/Student Transfer/transfer_download.php')
+                ->setURL('/modules/Student Transfer/transfer_manage_export.php')
+                ->addParam('gibbonSchoolYearID', $gibbonSchoolYearID)
                 ->setIcon('download');
         }
 
         $actions->addAction('delete', __('Delete'))
             ->setURL('/modules/Student Transfer/transfer_manage_delete.php')
+            ->addParam('gibbonSchoolYearID', $gibbonSchoolYearID)
             ->modalWindow(650, 400);
     });
 

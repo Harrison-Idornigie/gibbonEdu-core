@@ -85,6 +85,7 @@ $moduleTables = [
         `downloadToken` VARCHAR(255) NULL,
         `downloadExpiry` TIMESTAMP NULL DEFAULT NULL,
         `packagePassword` VARCHAR(255) NULL,
+        `packagePasswordPlain` VARCHAR(10) NULL,
         PRIMARY KEY (`gibbonStudentTransferLogID`),
         INDEX `gibbonPersonID` (`gibbonPersonID`),
         INDEX `gibbonSchoolYearID` (`gibbonSchoolYearID`),
@@ -133,6 +134,10 @@ $gibbonSetting = [
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
     VALUES 
     ('Student Transfer', 'requiredDocuments', 'Required Documents', 'Comma-separated list of required documents for transfer.', 'Photo,ID Card,Medical Records')",
+    
+    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('Student Transfer', 'destinationSchools', 'Destination Schools', 'Comma-separated list of available destination schools.', '')",
     
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
     VALUES 

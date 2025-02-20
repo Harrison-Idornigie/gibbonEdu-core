@@ -31,6 +31,7 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
 
     // Update other settings
     $settingGateway->updateSettingByScope('Student Transfer', 'requiredDocuments', $_POST['requiredDocuments'] ?? '');
+    $settingGateway->updateSettingByScope('Student Transfer', 'destinationSchools', $_POST['destinationSchools'] ?? '');
     $settingGateway->updateSettingByScope('Student Transfer', 'retentionPeriodCompleted', $_POST['retentionPeriodCompleted'] ?? '365');
     $settingGateway->updateSettingByScope('Student Transfer', 'enableBatchTransfers', $_POST['enableBatchTransfers'] ?? 'N');
 

@@ -56,6 +56,13 @@ if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_
             ->setRows(3);
 
     $row = $form->addRow();
+        $row->addLabel('destinationSchools', __('Destination Schools'))
+            ->description(__('Comma-separated list of available destination schools.'));
+        $row->addTextArea('destinationSchools')
+            ->setValue($settingGateway->getSettingByScope('Student Transfer', 'destinationSchools'))
+            ->setRows(3);
+
+    $row = $form->addRow();
         $row->addLabel('retentionPeriodCompleted', __('Completed Transfer Retention'))
             ->description(__('Number of days to retain completed transfers before archiving.'));
         $row->addNumber('retentionPeriodCompleted')

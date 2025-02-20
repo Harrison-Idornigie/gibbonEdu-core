@@ -86,9 +86,11 @@ class StudentExporter
      *
      * @param string $studentID
      * @param string $transferID
+     * @param array|null $existingPassword Array containing both hash and plain password
+     * @param array|null $existingToken Existing token data to reuse
      * @return array Path to the generated ZIP file and password
      */
-    public function exportToZip($studentID, $transferID)
+    public function exportToZip($studentID, $transferID, $existingPassword = null, $existingToken = null)
     {
         // Check for required PHP extensions
         if (!extension_loaded('zip')) {
@@ -146,9 +148,13 @@ class StudentExporter
                 throw new \RuntimeException('Failed to write manifest file.');
             }
 
-            // Generate random password for ZIP
-            $password = $this->securityService->generateSecurePassword();
-
+            // Generate or reuse password
+            if ($existingPassword && !empty($existingPassword['plain'])) {
+                $password = $existingPassword['plain'];
+            } else {
+                $password = $this->securityService->generateSecurePassword();
+            }
+            
             // Create password-protected ZIP file
             $zipFile = $tempDir . '.zip';
             $zip = new ZipArchive();
@@ -196,17 +202,22 @@ class StudentExporter
                 $zip->close();
             }
 
-            // Generate download token with error handling
-            $token = $this->securityService->generateDownloadToken($transferID);
-            if (empty($token['token']) || empty($token['expiry'])) {
-                throw new \RuntimeException('Failed to generate download token.');
+            // Generate or reuse download token
+            if ($existingToken && !empty($existingToken['token']) && !empty($existingToken['expiry'])) {
+                $token = $existingToken['token'];
+                $expiry = $existingToken['expiry'];
+            } else {
+                $tokenData = $this->securityService->generatePublicDownloadToken($transferID);
+                $token = $tokenData['token'];
+                $expiry = $tokenData['expiry'];
             }
 
             return [
                 'path' => $zipFile,
                 'password' => $password,
-                'token' => $token['token'],
-                'expiry' => $token['expiry']
+                'passwordHash' => password_hash($password, PASSWORD_DEFAULT),
+                'token' => $token,
+                'expiry' => $expiry
             ];
         } finally {
             // Clean up temporary files
@@ -664,5 +675,23 @@ class StudentExporter
         ];
         
         return $messages[$code] ?? 'Unknown error';
+    }
+
+    /**
+     * Extract original password from hash by finding a matching 6-digit number
+     * Only used when reusing an existing password
+     *
+     * @param string $hash Password hash from database
+     * @return string|null Original password if found, null otherwise
+     */
+    private function getPasswordFromHash($hash)
+    {
+        // Try all possible 6-digit numbers
+        for ($i = 100000; $i <= 999999; $i++) {
+            if (password_verify((string)$i, $hash)) {
+                return (string)$i;
+            }
+        }
+        return null;
     }
 }
