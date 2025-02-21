@@ -8,9 +8,11 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 
 use Gibbon\Domain\System\SettingGateway;
 use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
+use Gibbon\Module\StudentTransfer\Domain\TransferImportGateway;
 use Gibbon\Module\StudentTransfer\Domain\ImportProcessor;
 use Gibbon\Module\StudentTransfer\Domain\SecurityService;
 use Gibbon\Module\StudentTransfer\Domain\NotificationService;
+use Gibbon\Data\Validator;
 
 require_once '../../gibbon.php';
 
@@ -25,172 +27,232 @@ if (!isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer
 // Initialize services
 $settingGateway = $container->get(SettingGateway::class);
 $transferGateway = $container->get(TransferGateway::class);
+$transferImportGateway = $container->get(TransferImportGateway::class);
 $importProcessor = $container->get(ImportProcessor::class);
 $securityService = $container->get(SecurityService::class);
 $notificationService = $container->get(NotificationService::class);
 
-// Get form data
+// Get step and form data
+$step = $_POST['step'] ?? '';
 $mode = $_POST['mode'] ?? '';
-$studentTransferLogID = $_POST['studentTransferLogID'] ?? '';
+$studentTransferImportID = $_POST['studentTransferImportID'] ?? '';
+$password = $_POST['password'] ?? '';
+$ignoreErrors = $_POST['ignoreErrors'] ?? 'N';
+$notifyUsers = $_POST['notifyUsers'] ?? 'Y';
+$confirmDuplicates = $_POST['confirmDuplicates'] ?? 'N';
 
-// Handle upload mode
-if ($mode == 'upload') {
-    // Check file upload
-    if (empty($_FILES['file']['tmp_name'])) {
-        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&return=error1';
-        header("Location: {$URL}");
-        exit;
-    }
-
-    // Validate file type
-    $fileType = mime_content_type($_FILES['file']['tmp_name']);
-    if ($fileType !== 'application/zip') {
-        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&return=error2';
-        header("Location: {$URL}");
-        exit;
-    }
-
-    // Create temp directory
-    $tempDir = sys_get_temp_dir().'/gibbon_transfer_'.uniqid();
-    if (!mkdir($tempDir, 0755, true)) {
-        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&return=error3';
-        header("Location: {$URL}");
-        exit;
-    }
-
-    try {
-        // Extract ZIP file
-        $zip = new ZipArchive();
-        if ($zip->open($_FILES['file']['tmp_name']) !== true) {
-            throw new Exception('Failed to open ZIP file');
-        }
-
-        // Extract to temp directory
-        if (!$zip->extractTo($tempDir)) {
-            throw new Exception('Failed to extract ZIP file');
-        }
-        $zip->close();
-
-        // Validate package structure
-        if (!file_exists($tempDir.'/student_data.json') || !file_exists($tempDir.'/metadata.json')) {
-            throw new Exception('Invalid package structure');
-        }
-
-        // Read metadata
-        $metadata = json_decode(file_get_contents($tempDir.'/metadata.json'), true);
-        if (empty($metadata)) {
-            throw new Exception('Invalid metadata');
-        }
-
-        // Verify package password
-        $password = $_POST['password'] ?? '';
-        if (!$securityService->verifyPackagePassword($password, $metadata['packagePassword'])) {
-            throw new Exception('Invalid package password');
-        }
-
-        // Create transfer record
-        $transferData = [
-            'status' => 'Pending Import',
-            'schoolNameFrom' => $metadata['schoolNameFrom'],
-            'schoolNameTo' => $session->get('organisationName'),
-            'gibbonPersonIDCreated' => $session->get('gibbonPersonID'),
-            'timestampCreated' => date('Y-m-d H:i:s'),
-            'packagePassword' => $metadata['packagePassword'],
-            'packagePasswordPlain' => $password,
-            'studentData' => json_decode(file_get_contents($tempDir.'/student_data.json'), true)
-        ];
-
-        $studentTransferLogID = $transferGateway->insert($transferData);
-        if (empty($studentTransferLogID)) {
-            throw new Exception('Failed to create transfer record');
-        }
-
-        // Send upload notification
-        $notificationService->sendTransferNotification(
-            $studentTransferLogID,
-            'upload',
-            ['schoolName' => $metadata['schoolNameFrom']]
-        );
-
-        // Move attachments to permanent storage
-        $attachmentDir = $tempDir.'/attachments';
-        if (is_dir($attachmentDir)) {
-            $targetDir = $session->get('absolutePath').'/uploads/studentTransfers/'.$studentTransferLogID;
-            if (!rename($attachmentDir, $targetDir)) {
-                throw new Exception('Failed to move attachments');
-            }
-        }
-
-        // Clean up temp directory
-        array_map('unlink', glob("$tempDir/*.*"));
-        rmdir($tempDir);
-
-        // Redirect to import preview
-        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&studentTransferLogID='.$studentTransferLogID;
-        header("Location: {$URL}");
-        exit;
-
-    } catch (Exception $e) {
-        // Clean up temp directory
-        if (is_dir($tempDir)) {
-            array_map('unlink', glob("$tempDir/*.*"));
-            rmdir($tempDir);
-        }
-
-        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&return=error4';
-        header("Location: {$URL}");
-        exit;
-    }
+// Validate the step
+if (empty($step) || !in_array($step, ['1', '2'])) {
+    $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&return=error1';
+    header("Location: {$URL}");
+    exit;
 }
 
-// Handle import mode
-if ($mode == 'import') {
-    try {
-        // Get transfer record
-        $transfer = $transferGateway->getByID($studentTransferLogID);
-        if (empty($transfer)) {
-            throw new Exception('Invalid transfer record');
+try {
+    // STEP 1: FILE UPLOAD AND VALIDATION
+    if ($step == '1') {
+        // Validate file upload
+        if (empty($_FILES['file']['tmp_name'])) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error1';
+            header("Location: {$URL}");
+            exit;
         }
 
-        // Create application form
-        $applicationID = $importProcessor->createApplicationForm($transfer['studentData'], $studentTransferLogID);
-        if (empty($applicationID)) {
-            throw new Exception('Failed to create application form');
+        // Validate file type
+        $fileType = mime_content_type($_FILES['file']['tmp_name']);
+        if ($fileType !== 'application/zip') {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error2';
+            header("Location: {$URL}");
+            exit;
         }
 
-        // Update transfer status
-        $transferGateway->update($studentTransferLogID, [
-            'status' => 'Imported',
-            'timestampModified' => date('Y-m-d H:i:s')
+        // Verify ZIP encryption
+        if (!$securityService->isZipEncrypted($_FILES['file']['tmp_name'])) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error5';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Create temp directory
+        $tempDir = sys_get_temp_dir() . '/transfer_' . uniqid();
+        if (!mkdir($tempDir, 0755, true)) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error1';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Function to clean up temp directory
+        $cleanup = function() use ($tempDir) {
+            if (!is_dir($tempDir)) {
+                return;
+            }
+
+            $files = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($tempDir, \RecursiveDirectoryIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+
+            foreach ($files as $file) {
+                if ($file->isDir()) {
+                    rmdir($file->getRealPath());
+                } else {
+                    unlink($file->getRealPath());
+                }
+            }
+
+            rmdir($tempDir);
+        };
+
+        try {
+            // Move uploaded file to temp directory
+            $uploadedFile = $_FILES['file']['tmp_name'];
+            $targetPath = $tempDir . '/upload.zip';
+            if (!move_uploaded_file($uploadedFile, $targetPath)) {
+                throw new \Exception('Failed to move uploaded file');
+            }
+
+            // Extract and validate the ZIP file
+            $zip = new \ZipArchive();
+            if ($zip->open($targetPath) !== true) {
+                throw new \Exception('Failed to open ZIP file');
+            }
+
+            // Set password for decryption
+            if (!$zip->setPassword($password)) {
+                throw new \Exception('Invalid password');
+            }
+
+            // Extract to temp directory
+            if (!$zip->extractTo($tempDir)) {
+                throw new \Exception('Failed to extract ZIP file');
+            }
+            $zip->close();
+
+            // Process the import
+            $importData = $importProcessor->processImport($tempDir, $password);
+            if ($importData === false) {
+                throw new \Exception('Failed to process import data');
+            }
+
+            // Check for duplicates
+            $duplicates = $importProcessor->checkDuplicates($importData['studentData']);
+
+            // Create import record
+            $data = [
+                'gibbonSchoolYearID' => $session->get('gibbonSchoolYearID'),
+                'gibbonPersonIDCreated' => $session->get('gibbonPersonID'),
+                'status' => 'Pending',
+                'mode' => $mode,
+                'ignoreErrors' => $ignoreErrors,
+                'notifyUsers' => $notifyUsers,
+                'schoolNameFrom' => $importData['metadata']['schoolNameFrom'] ?? '',
+                'metadata' => json_encode($importData['metadata']),
+                'studentData' => json_encode($importData['studentData']),
+                'duplicates' => !empty($duplicates) ? json_encode($duplicates) : null,
+                'importProgress' => json_encode([
+                    'stage' => 'Upload',
+                    'status' => 'Complete',
+                    'errors' => [],
+                    'warnings' => []
+                ]),
+                'timestampCreated' => date('Y-m-d H:i:s')
+            ];
+
+            // Insert import record
+            $studentTransferImportID = $transferImportGateway->insert($data);
+            if (empty($studentTransferImportID)) {
+                throw new \Exception('Failed to create import record');
+            }
+
+            // Redirect to step 2
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=2&studentTransferImportID='.$studentTransferImportID;
+            header("Location: {$URL}");
+            exit;
+
+        } catch (\Exception $e) {
+            $cleanup();
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error0';
+            header("Location: {$URL}");
+            exit;
+        }
+    }
+
+    // STEP 2: CONFIRM DATA
+    elseif ($step == '2') {
+        // Validate import record exists
+        if (empty($studentTransferImportID)) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error1';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Get import data
+        $importData = $transferImportGateway->getByID($studentTransferImportID);
+        if (empty($importData)) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error2';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Check for duplicates requiring confirmation
+        $duplicates = !empty($importData['duplicates']) ? json_decode($importData['duplicates'], true) : [];
+        if (!empty($duplicates) && $confirmDuplicates != 'Y') {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=2&studentTransferImportID='.$studentTransferImportID.'&return=error3';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Update progress
+        $progress = [
+            'stage' => 'Preview',
+            'status' => 'Complete',
+            'errors' => [],
+            'warnings' => []
+        ];
+        $transferImportGateway->update($studentTransferImportID, ['importProgress' => json_encode($progress)]);
+
+        // Perform dry run and live run import
+        $studentData = json_decode($importData['studentData'], true);
+        $dryRunResult = $importProcessor->dryRun($studentData, [
+            'mode' => $importData['mode'],
+            'ignoreErrors' => $importData['ignoreErrors']
         ]);
 
-        // Send import notification
-        $notificationService->sendTransferNotification(
-            $studentTransferLogID,
-            'import',
-            ['applicationID' => $applicationID]
-        );
+        $liveRunResult = $importProcessor->liveRun($studentData, [
+            'mode' => $importData['mode'],
+            'ignoreErrors' => $importData['ignoreErrors']
+        ]);
 
-        // Notify previous school
-        $notificationService->notifyPreviousSchool(
-            $studentTransferLogID,
-            'Imported',
-            'The student transfer has been successfully imported and is pending review.'
-        );
+        // Update progress with dry run and live run results
+        $progress = [
+            'stage' => 'LiveRun',
+            'status' => 'Complete',
+            'errors' => array_merge($dryRunResult['errors'] ?? [], $liveRunResult['errors'] ?? []),
+            'warnings' => array_merge($dryRunResult['warnings'] ?? [], $liveRunResult['warnings'] ?? []),
+            'imported' => $liveRunResult['imported'] ?? 0
+        ];
+        $transferImportGateway->update($studentTransferImportID, [
+            'importProgress' => json_encode($progress),
+            'status' => 'Complete'
+        ]);
 
-        // Redirect to application form
-        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Students/applicationForm_manage_edit.php&gibbonApplicationFormID='.$applicationID.'&return=success0';
-        header("Location: {$URL}");
-        exit;
+        // Send notifications if enabled
+        if ($importData['notifyUsers'] == 'Y') {
+            $notificationService->sendTransferNotification(
+                $studentTransferImportID,
+                'import',
+                ['count' => $progress['imported']]
+            );
+        }
 
-    } catch (Exception $e) {
-        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&studentTransferLogID='.$studentTransferLogID.'&return=error0';
+        // Redirect to manage page with success
+        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage.php&return=success0';
         header("Location: {$URL}");
         exit;
     }
-}
 
-// Invalid mode
-$URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage.php';
-header("Location: {$URL}");
-exit;
+} catch (\Exception $e) {
+    $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&return=error0';
+    header("Location: {$URL}");
+    exit;
+}

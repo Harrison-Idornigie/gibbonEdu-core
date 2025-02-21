@@ -71,16 +71,15 @@ $moduleTables = [
     "CREATE TABLE `gibbonStudentTransferLog` (
         `gibbonStudentTransferLogID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
         `gibbonPersonID` INT(10) UNSIGNED ZEROFILL NOT NULL,
-        `gibbonSchoolYearID` INT(10) UNSIGNED ZEROFILL NOT NULL,
-        `schoolNameFrom` VARCHAR(100) NOT NULL,
-        `schoolNameTo` VARCHAR(100) NOT NULL,
+        `gibbonSchoolYearID` INT(3) UNSIGNED ZEROFILL NOT NULL,
         `gibbonPersonIDCreated` INT(10) UNSIGNED ZEROFILL NOT NULL,
-        `status` ENUM('Pending','Exported','Imported','Complete','Cancelled') NOT NULL DEFAULT 'Pending',
+        `status` ENUM('Pending','Exported','Cancelled') NOT NULL DEFAULT 'Pending',
+        `schoolNameFrom` VARCHAR(100) NULL,
+        `schoolNameTo` VARCHAR(100) NULL,
         `notes` TEXT NULL,
         `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         `timestampModified` TIMESTAMP NULL DEFAULT NULL,
         `exportTimestamp` TIMESTAMP NULL DEFAULT NULL,
-        `importTimestamp` TIMESTAMP NULL DEFAULT NULL,
         `signature` TEXT NULL,
         `downloadToken` VARCHAR(255) NULL,
         `downloadExpiry` TIMESTAMP NULL DEFAULT NULL,
@@ -96,6 +95,32 @@ $moduleTables = [
         CONSTRAINT `gibbonStudentTransferLog_ibfk_2` FOREIGN KEY (`gibbonSchoolYearID`) 
             REFERENCES `gibbonSchoolYear` (`gibbonSchoolYearID`) ON DELETE RESTRICT,
         CONSTRAINT `gibbonStudentTransferLog_ibfk_3` FOREIGN KEY (`gibbonPersonIDCreated`) 
+            REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE RESTRICT
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+    "DROP TABLE IF EXISTS `gibbonStudentTransferImport`",
+    "CREATE TABLE `gibbonStudentTransferImport` (
+        `gibbonStudentTransferImportID` INT(12) UNSIGNED ZEROFILL NOT NULL AUTO_INCREMENT,
+        `gibbonSchoolYearID` INT(3) UNSIGNED ZEROFILL NOT NULL,
+        `gibbonPersonIDCreated` INT(10) UNSIGNED ZEROFILL NOT NULL,
+        `status` VARCHAR(20) NOT NULL DEFAULT 'Preview',
+        `mode` ENUM('Insert','Update','Update & Insert') NOT NULL DEFAULT 'Insert',
+        `ignoreErrors` ENUM('Y','N') NOT NULL DEFAULT 'N',
+        `notifyUsers` ENUM('Y','N') NOT NULL DEFAULT 'Y',
+        `schoolNameFrom` VARCHAR(100) NULL,
+        `metadata` TEXT NULL,
+        `studentData` TEXT NULL,
+        `duplicates` TEXT NULL,
+        `importProgress` JSON NULL,
+        `timestampCreated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `timestampModified` TIMESTAMP NULL DEFAULT NULL,
+        `importTimestamp` TIMESTAMP NULL DEFAULT NULL,
+        PRIMARY KEY (`gibbonStudentTransferImportID`),
+        INDEX `gibbonSchoolYearID` (`gibbonSchoolYearID`),
+        INDEX `gibbonPersonIDCreated` (`gibbonPersonIDCreated`),
+        CONSTRAINT `gibbonStudentTransferImport_ibfk_1` FOREIGN KEY (`gibbonSchoolYearID`) 
+            REFERENCES `gibbonSchoolYear` (`gibbonSchoolYearID`) ON DELETE RESTRICT,
+        CONSTRAINT `gibbonStudentTransferImport_ibfk_2` FOREIGN KEY (`gibbonPersonIDCreated`) 
             REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE RESTRICT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
 
@@ -150,7 +175,7 @@ $moduleTables = [
 $gibbonSetting = [
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
     VALUES 
-    ('Student Transfer', 'requiredDocuments', 'Required Documents', 'Comma-separated list of required documents for transfer.', 'Photo,ID Card,Medical Records')",
+    ('Student Transfer', 'encryptionKey', 'Encryption Key', 'Key used for encrypting and signing transfer packages.', '')",
     
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
     VALUES 
@@ -163,10 +188,6 @@ $gibbonSetting = [
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
     VALUES 
     ('Student Transfer', 'enableBatchTransfers', 'Enable Batch Transfers', 'Allow administrators to process multiple transfers at once.', 'Y')",
-    
-    "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
-    VALUES 
-    ('Student Transfer', 'encryptionKey', 'Encryption Key', 'Secure key used for encrypting and signing transfer packages.', '')",
     
     "INSERT INTO `gibbonSetting` (`scope`, `name`, `nameDisplay`, `description`, `value`) 
     VALUES 
@@ -184,7 +205,7 @@ $actionRows = [
         'precedence' => '0',
         'category' => 'Student Data',
         'description' => 'View and manage student transfers between schools.',
-        'URLList' => 'transfer_manage.php,transfer_manage_add.php,transfer_manage_edit.php,transfer_manage_delete.php,transfer_manage_export.php,transfer_manage_import.php,transfer_manage_batch.php',
+        'URLList' => 'transfer_manage.php,transfer_manage_add.php,transfer_manage_edit.php,transfer_manage_delete.php,transfer_manage_export.php,transfer_manage_batch.php',
         'entryURL' => 'transfer_manage.php',
         'entrySidebar' => 'Y',
         'menuShow' => 'Y',
@@ -203,7 +224,7 @@ $actionRows = [
         'precedence' => '0',
         'category' => 'Student Data',
         'description' => 'Import student data from transfer packages.',
-        'URLList' => 'transfer_manage_import.php',
+        'URLList' => 'transfer_manage_import.php,transfer_manage_importProcess.php,student_import_history.php,student_import_history_view.php',
         'entryURL' => 'transfer_manage_import.php',
         'entrySidebar' => 'Y',
         'menuShow' => 'Y',

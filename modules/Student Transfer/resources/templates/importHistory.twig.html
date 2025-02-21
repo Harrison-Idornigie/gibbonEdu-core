@@ -1,0 +1,110 @@
+{% extends "layout.twig.html" %}
+
+{% block content %}
+<div class="w-full p-4">
+    <div class="flex flex-col gap-4">
+        <!-- Header -->
+        <div class="flex justify-between items-center">
+            <h2 class="text-lg font-bold">{{ title }}</h2>
+            <div class="text-sm text-gray-600">{{ timestamp }}</div>
+        </div>
+
+        <!-- Status and School Info -->
+        <div class="grid grid-cols-2 gap-4 bg-white rounded shadow p-4">
+            <div>
+                <h3 class="font-semibold mb-2">{{ __('Transfer Details') }}</h3>
+                <table class="w-full">
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-600">{{ __('Status') }}:</td>
+                        <td>
+                            {% if status == 'Imported' %}
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">{{ __('Success') }}</span>
+                            {% elseif status == 'Failed' %}
+                                <span class="bg-red-100 text-red-800 px-2 py-1 rounded">{{ __('Failed') }}</span>
+                            {% else %}
+                                <span class="bg-gray-100 text-gray-800 px-2 py-1 rounded">{{ __(status) }}</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-600">{{ __('From School') }}:</td>
+                        <td>{{ schoolFrom }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-600">{{ __('To School') }}:</td>
+                        <td>{{ schoolTo }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-600">{{ __('File Name') }}:</td>
+                        <td>{{ filename }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            {% if metadata %}
+            <div>
+                <h3 class="font-semibold mb-2">{{ __('Student Details') }}</h3>
+                <table class="w-full">
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-600">{{ __('Name') }}:</td>
+                        <td>{{ metadata.studentName }}</td>
+                    </tr>
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-600">{{ __('Date of Birth') }}:</td>
+                        <td>{{ metadata.dateOfBirth }}</td>
+                    </tr>
+                    {% if metadata.yearGroup %}
+                    <tr>
+                        <td class="py-1 pr-4 text-gray-600">{{ __('Year Group') }}:</td>
+                        <td>{{ metadata.yearGroup }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Progress Steps -->
+        <div class="bg-white rounded shadow p-4">
+            <h3 class="font-semibold mb-4">{{ __('Import Progress') }}</h3>
+            <div class="flex flex-col gap-2">
+                {% for step in steps %}
+                <div class="flex items-center gap-2 p-2 border-b">
+                    <div class="w-6 h-6 flex items-center justify-center">
+                        {% if step.status == 'success' %}
+                            <i class="fas fa-check text-green-600"></i>
+                        {% elseif step.status == 'error' %}
+                            <i class="fas fa-times text-red-600"></i>
+                        {% elseif step.status == 'active' %}
+                            <i class="fas fa-circle-notch fa-spin text-blue-600"></i>
+                        {% else %}
+                            <i class="fas fa-circle text-gray-400"></i>
+                        {% endif %}
+                    </div>
+                    <div class="flex-grow">
+                        <div class="font-semibold">{{ step.name }}</div>
+                        {% if step.message %}
+                            <div class="text-sm text-gray-600">{{ step.message }}</div>
+                        {% endif %}
+                    </div>
+                    {% if step.timestamp %}
+                        <div class="text-sm text-gray-500">{{ step.timestamp }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Application Link -->
+        {% if applicationID %}
+        <div class="bg-white rounded shadow p-4">
+            <h3 class="font-semibold mb-2">{{ __('Application Form') }}</h3>
+            <p>{{ __('An application form has been created for this student.') }}</p>
+            <a href="{{ applicationURL }}" class="inline-block mt-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                {{ __('View Application') }}
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

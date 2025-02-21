@@ -7,224 +7,466 @@ Gibbon, Gibbon Education Ltd. (Hong Kong)
 */
 
 use Gibbon\Forms\Form;
+use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
 use Gibbon\Module\StudentTransfer\Domain\ImportProcessor;
+use Gibbon\Module\StudentTransfer\Domain\SecurityService;
+use Gibbon\Module\StudentTransfer\Domain\TransferImportGateway;
 
 // Module includes
-include '../../gibbon.php';
+require_once dirname(__FILE__) . '/../../gibbon.php';
+require_once dirname(__FILE__) . '/moduleFunctions.php';
 
-if (isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_manage_import.php') == false) {
+if (!isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer_manage_import.php')) {
     // Access denied
     $page->addError(__('You do not have access to this action.'));
-} else {
-    // Proceed!
-    $page->breadcrumbs
-        ->add(__('Manage Student Transfers'), 'transfer_manage.php')
-        ->add(__('Import Student Transfer'));
+    return;
+}
 
-    // Check for existing transfer ID
-    $studentTransferLogID = $_GET['studentTransferLogID'] ?? '';
-    $mode = empty($studentTransferLogID) ? 'upload' : 'import';
+$page->breadcrumbs->add(__('Import Student Transfer'));
 
-    if ($mode == 'upload') {
-        // Show file upload form
-        $form = Form::create('importTransfer', $session->get('absoluteURL').'/modules/Student Transfer/transfer_manage_importProcess.php');
+// Get step from URL or default to 1
+$step = $_GET['step'] ?? 1;
+$studentTransferImportID = $_GET['studentTransferImportID'] ?? '';
+
+// Define the steps
+$steps = [
+    1 => __('Select File'),
+    2 => __('Confirm Data'),
+    3 => __('Dry Run'),
+    4 => __('Live Run')
+];
+
+// Display the step progress bar
+echo '<ul class="flex justify-between w-full p-4 mb-8 bg-white rounded shadow steps">';
+foreach ($steps as $stepNum => $stepName) {
+    $stepClass = 'step ' . ($stepNum <= $step ? 'active' : '');
+    printf('<li class="%s">%s</li>', $stepClass, $stepName);
+}
+echo '</ul>';
+
+echo '<h2>' . __('Step {number}', ['number' => $step]) . ' - ' . $steps[$step] . '</h2>';
+
+if ($step == 1) {
+    // STEP 1: FILE SELECTION
+    $form = Form::create('importStep1', $session->get('absoluteURL').'/modules/Student Transfer/transfer_manage_importProcess.php');
+    $form->setTitle(__('Import Details'));
+    
+    $form->addHiddenValue('step', '1');
+    $form->addHiddenValue('address', $session->get('address'));
+
+    // Add a warning about backing up
+    $row = $form->addRow()->addClass('warning');
+        $row->addContent(__('Always backup your database before performing an import.'))
+            ->wrap('<div class="message warning p-4 rounded">', '</div>');
+
+    // Import mode
+    $row = $form->addRow();
+        $row->addLabel('mode', __('Mode'));
+        $row->addSelect('mode')
+            ->fromArray(['Insert' => __('Insert Only'), 'Update' => __('Update Only'), 'Update & Insert' => __('Update & Insert')])
+            ->required()
+            ->selected('Insert');
+
+    // File upload
+    $row = $form->addRow();
+        $row->addLabel('file', __('Transfer Package'));
+        $row->addFileUpload('file')
+            ->required()
+            ->accepts('.zip')
+            ->setMaxUpload(false);
+
+    // Package password
+    $row = $form->addRow();
+        $row->addLabel('password', __('Package Password'))
+            ->description(__('Enter the password provided by the source school'));
+        $row->addPassword('password')
+            ->required()
+            ->maxLength(255);
+
+    // Options
+    $form->addRow()->addHeading(__('Options'));
+
+    $row = $form->addRow();
+        $row->addLabel('ignoreErrors', __('Ignore Errors?'))
+            ->description(__('Should the import continue if non-critical errors are found?'));
+        $row->addYesNo('ignoreErrors')->selected('N');
+
+    $row = $form->addRow();
+        $row->addLabel('notifyUsers', __('Notify Users?'))
+            ->description(__('Send notifications to relevant staff members?'));
+        $row->addYesNo('notifyUsers')->selected('Y');
+
+    $row = $form->addRow();
+        $row->addFooter();
+        $row->addSubmit();
+
+    echo $form->getOutput();
+
+} elseif ($step == 2) {
+    // STEP 2: DATA PREVIEW
+    if (empty($studentTransferImportID)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    // Get import data
+    $transferImportGateway = $container->get(TransferImportGateway::class);
+    $importData = $transferImportGateway->getByID($studentTransferImportID);
+
+    if (empty($importData)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    // Get student data
+    $studentData = json_decode($importData['studentData'], true);
+    $progress = !empty($importData['importProgress']) ? json_decode($importData['importProgress'], true) : [];
+    $duplicates = !empty($progress['duplicates']) ? $progress['duplicates'] : [];
+
+    // Create the form
+    $form = Form::create('importPreview', $session->get('absoluteURL').'/modules/Student Transfer/transfer_manage_importProcess.php');
+    
+    // Add hidden values
+    $form->addHiddenValue('step', '2');
+    $form->addHiddenValue('studentTransferImportID', $studentTransferImportID);
+    $form->addHiddenValue('address', $session->get('address'));
+
+    // STUDENT DETAILS
+    $form->addRow()->addHeading(__('Student Details'));
+
+    $row = $form->addRow();
+        $row->addLabel('fullName', __('Full Name'));
+        $row->addTextField('fullName')
+            ->setValue($studentData['personal']['surname'] . ', ' . $studentData['personal']['firstName'])
+            ->readonly();
+
+    $row = $form->addRow();
+        $row->addLabel('dob', __('Date of Birth'));
+        $row->addDate('dob')
+            ->setValue($studentData['personal']['dob'])
+            ->readonly();
+
+    // ACADEMIC DETAILS
+    $form->addRow()->addHeading(__('Academic Details'));
+
+    $row = $form->addRow();
+        $row->addLabel('previousSchool', __('Previous School'));
+        $row->addTextField('previousSchool')
+            ->setValue($importData['schoolNameFrom'])
+            ->readonly();
+
+    if (!empty($studentData['academic'])) {
+        $col = $form->addRow()->addColumn();
+        $col->addContent('<h4>'.__('Academic Information').'</h4>');
         
-        $form->addHiddenValue('address', $session->get('address'));
-        $form->addHiddenValue('mode', 'upload');
+        $table = $col->addTable()->setClass('smallIntBorder w-full');
+        $header = $table->addHeaderRow();
+        $header->addContent(__('Year Group'));
+        $header->addContent(__('Form Group'));
 
-        $row = $form->addRow()->addHeading(__('Upload Transfer Package'))
-            ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-            ->addClass('toggleDetails')
-            ->addClass('font-bold');
+        $row = $table->addRow();
+        $row->addContent($studentData['academic']['yearGroup']['name'] ?? '');
+        $row->addContent($studentData['academic']['formGroup']['name'] ?? '');
+    }
 
-        $row = $form->addRow();
-            $row->addLabel('file', __('Transfer Package'))
-                ->description(__('Upload a student transfer package (.zip)'));
-            $row->addFileUpload('file')
-                ->required()
-                ->accepts('.zip');
+    // Display grades if available
+    if (!empty($studentData['grades'])) {
+        $col = $form->addRow()->addColumn();
+        $col->addContent('<h4>'.__('Academic Records').'</h4>');
+        
+        $table = $col->addTable()->setClass('smallIntBorder w-full');
+        $header = $table->addHeaderRow();
+        $header->addContent(__('Subject'));
+        $header->addContent(__('Grade'));
+        $header->addContent(__('Date'));
 
-        $row = $form->addRow();
-            $row->addLabel('password', __('Package Password'))
-                ->description(__('Enter the password provided by the source school.'));
-            $row->addPassword('password')
-                ->required();
+        foreach ($studentData['grades'] as $record) {
+            $row = $table->addRow();
+            $row->addContent($record['subject'] ?? '');
+            $row->addContent($record['grade'] ?? '');
+            $row->addContent(!empty($record['date']) ? Format::date($record['date']) : '');
+        }
+    }
 
-        $row = $form->addRow();
-            $row->addFooter();
-            $row->addSubmit();
-
-        echo $form->getOutput();
-
-    } else {
-        // Validate the transfer ID
-        $transferGateway = $container->get(TransferGateway::class);
-        $transfer = $transferGateway->getTransferByID($studentTransferLogID);
-        $importProcessor = $container->get(ImportProcessor::class);
-
-        if (empty($transfer)) {
-            $page->addError(__('The specified record cannot be found.'));
-        } else {
-            // Check if transfer is in correct state for import
-            if ($transfer['status'] != 'Pending Import') {
-                $page->addError(__('This transfer cannot be imported in its current state.'));
-            } else {
-                // Load student data
-                $studentData = $transfer['studentData'];
-                
-                // Check for duplicates
-                $duplicates = $importProcessor->checkDuplicates($studentData);
-                
-                // Show preview and confirmation form
-                $form = Form::create('confirmImport', $session->get('absoluteURL').'/modules/Student Transfer/transfer_manage_importProcess.php');
-                
-                $form->addHiddenValue('address', $session->get('address'));
-                $form->addHiddenValue('mode', 'import');
-                $form->addHiddenValue('studentTransferLogID', $studentTransferLogID);
-
-                // DUPLICATE WARNINGS
-                if (!empty($duplicates)) {
-                    $row = $form->addRow()->addHeading(__('Potential Duplicates'))
-                        ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                        ->addClass('toggleDetails warning')
-                        ->addClass('font-bold text-warning');
-
-                    foreach ($duplicates as $type => $matches) {
-                        $row = $form->addRow()->addClass('duplicateWarning bg-warning-100');
-                            $row->addContent(sprintf(__('Found %d potential matches by %s:'), count($matches), $type));
-                            
-                        foreach ($matches as $match) {
-                            $row = $form->addRow()->addClass('duplicateWarning bg-warning-100');
-                                $row->addContent(Format::name('', $match['preferredName'], $match['surname'], 'Student'))
-                                    ->append(' - '.$match['dob']);
-                        }
-                    }
-                }
-
-                // DATA PREVIEW
-                $row = $form->addRow()->addHeading(__('Student Data Preview'));
-
-                // Personal Information
-                $row = $form->addRow();
-                    $row->addHeading(__('Personal Information'))
-                        ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                        ->addClass('toggleDetails');
-
-                $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
-                
-                $row = $table->addRow();
-                    $row->addLabel('name', __('Name'));
-                    $row->addContent(Format::name('', $studentData['preferredName'], $studentData['surname'], 'Student'));
-
-                $row = $table->addRow();
-                    $row->addLabel('dob', __('Date of Birth'));
-                    $row->addContent(Format::date($studentData['dob']));
-
-                $row = $table->addRow();
-                    $row->addLabel('gender', __('Gender'));
-                    $row->addContent($studentData['gender']);
-
-                $row = $table->addRow();
-                    $row->addLabel('email', __('Email'));
-                    $row->addContent($studentData['email']);
-
-                // Academic Information
-                $row = $form->addRow();
-                    $row->addHeading(__('Academic Information'))
-                        ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                        ->addClass('toggleDetails');
-
-                $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
-                
-                foreach ($studentData['academic']['enrolments'] as $enrolment) {
-                    $row = $table->addRow();
-                        $row->addLabel('school', __('School'));
-                        $row->addContent($enrolment['schoolName']);
-                    
-                    $row = $table->addRow();
-                        $row->addLabel('yearGroup', __('Year Group'));
-                        $row->addContent($enrolment['yearGroup']);
-                    
-                    $row = $table->addRow();
-                        $row->addLabel('dates', __('Dates'));
-                        $row->addContent(Format::date($enrolment['dateStart']).' - '.Format::date($enrolment['dateEnd']));
-                }
-
-                // Medical Information
-                if (!empty($studentData['medical'])) {
-                    $row = $form->addRow();
-                        $row->addHeading(__('Medical Information'))
-                            ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                            ->addClass('toggleDetails');
-
-                    $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
-                    
-                    foreach ($studentData['medical']['conditions'] as $condition) {
-                        $row = $table->addRow();
-                            $row->addLabel('condition', __('Condition'));
-                            $row->addContent($condition['name']);
-                        
-                        $row = $table->addRow();
-                            $row->addLabel('details', __('Details'));
-                            $row->addContent($condition['details']);
-                    }
-                }
-
-                // Family Information
-                if (!empty($studentData['family'])) {
-                    $row = $form->addRow();
-                        $row->addHeading(__('Family Information'))
-                            ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                            ->addClass('toggleDetails');
-
-                    $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
-                    
-                    foreach ($studentData['family'] as $family) {
-                        $row = $table->addRow();
-                            $row->addLabel('relation', __('Relation'));
-                            $row->addContent($family['relation']);
-                        
-                        $row = $table->addRow();
-                            $row->addLabel('name', __('Name'));
-                            $row->addContent(Format::name('', $family['preferredName'], $family['surname'], 'Parent'));
-                        
-                        $row = $table->addRow();
-                            $row->addLabel('contact', __('Contact'));
-                            $row->addContent($family['email'].'<br/>'.$family['phone']);
-                    }
-                }
-
-                // Attachments
-                $attachmentDir = $session->get('absolutePath').'/uploads/studentTransfers/'.$studentTransferLogID;
-                if (is_dir($attachmentDir)) {
-                    $row = $form->addRow();
-                        $row->addHeading(__('Attachments'))
-                            ->append(' <i title="' . __('Show/Hide') . '" class="toggleDetails fas fa-chevron-down ml-2"></i>')
-                            ->addClass('toggleDetails');
-
-                    $table = $form->addRow()->addTable()->addClass('smallIntBorder fullWidth');
-                    
-                    foreach (glob($attachmentDir.'/*.*') as $file) {
-                        $row = $table->addRow();
-                            $row->addLabel('file', __('File'));
-                            $row->addContent(basename($file));
-                    }
-                }
-
-                // Confirmation
-                $row = $form->addRow();
-                    $row->addContent(__('Are you sure you want to import this student? This will create a new application form.'))
-                        ->wrap('<p class="mt-3">', '</p>')
-                        ->addClass('text-warning font-bold');
-
-                $row = $form->addRow();
-                    $row->addFooter();
-                    $row->addSubmit(__('Import Student'));
-
-                echo $form->getOutput();
+    // MEDICAL DETAILS
+    if (!empty($studentData['medical'])) {
+        $form->addRow()->addHeading(__('Medical Information'));
+        
+        $col = $form->addRow()->addColumn();
+        
+        if (!empty($studentData['medical']['conditions'])) {
+            $col->addContent('<h4>'.__('Medical Conditions').'</h4>');
+            foreach ($studentData['medical']['conditions'] as $condition) {
+                $col->addAlert($condition['name'], 'warning');
             }
+        }
+    }
+
+    // FAMILY INFORMATION
+    if (!empty($studentData['family'])) {
+        $form->addRow()->addHeading(__('Family Information'));
+        
+        foreach ($studentData['family'] as $relation) {
+            $col = $form->addRow()->addColumn();
+            $relationship = !empty($relation['relationship']) ? $relation['relationship'] : __('Family Member');
+            $col->addContent('<h4>'.$relationship.'</h4>');
+            
+            $table = $col->addTable()->setClass('smallIntBorder w-full');
+            
+            // Access adult information from the nested structure
+            if (!empty($relation['adult'])) {
+                $adult = $relation['adult'];
+                $name = implode(' ', array_filter([
+                    $adult['title'] ?? '',
+                    $adult['surname'] ?? '',
+                    $adult['preferredName'] ?? ''
+                ]));
+                $table->addRow()->addContent($name);
+                
+                if (!empty($adult['email'])) {
+                    $table->addRow()->addContent($adult['email']);
+                }
+                if (!empty($adult['phone1'])) {
+                    $table->addRow()->addContent($adult['phone1']);
+                }
+                if (!empty($adult['phone2'])) {
+                    $table->addRow()->addContent($adult['phone2']);
+                }
+            }
+
+            // Add family-level information
+            if (!empty($relation['homeAddress'])) {
+                $table->addRow()->addContent($relation['homeAddress']);
+            }
+            if (!empty($relation['languageHomePrimary'])) {
+                $table->addRow()->addContent(__('Primary Language').': '.$relation['languageHomePrimary']);
+            }
+            if (!empty($relation['languageHomeSecondary'])) {
+                $table->addRow()->addContent(__('Secondary Language').': '.$relation['languageHomeSecondary']);
+            }
+        }
+    }
+
+    // DUPLICATE WARNINGS
+    if (!empty($duplicates)) {
+        $form->addRow()->addHeading(__('Duplicate Warnings'))->addClass('text-red-600');
+        
+        foreach ($duplicates as $duplicate) {
+            $col = $form->addRow()->addColumn();
+            $col->addAlert(
+                __('Possible duplicate: ').$duplicate['name'].' ('.__('DOB').': '.Format::date($duplicate['dob']).')', 
+                'error'
+            );
+        }
+
+        $row = $form->addRow();
+            $row->addLabel('confirmDuplicates', __('Confirm Import'))
+                ->description(__('I confirm that I want to proceed with the import despite possible duplicates.'));
+            $row->addCheckbox('confirmDuplicates')
+                ->setValue('Y')
+                ->required();
+    }
+
+    // BUTTONS
+    $row = $form->addRow();
+        $row->addFooter();
+        $row->addSubmit(__('Proceed to Dry Run'));
+
+    echo $form->getOutput();
+
+} elseif ($step == 3) {
+    // STEP 3: DRY RUN
+    if (empty($studentTransferImportID)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    // Get import data
+    $importData = $transferImportGateway->getByID($studentTransferImportID);
+    if (empty($importData)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    // Create the form
+    $form = Form::create('importDryRun', $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=4&studentTransferImportID='.$studentTransferImportID);
+    $form->setTitle(__('Dry Run'));
+    
+    // Add hidden values
+    $form->addHiddenValue('address', $session->get('address'));
+    $form->addHiddenValue('step', '3');
+    $form->addHiddenValue('studentTransferImportID', $studentTransferImportID);
+
+    // Add description
+    $row = $form->addRow();
+        $row->addContent(__('The system will now perform a dry run to validate the data. No changes will be made to the database.'))
+            ->wrap('<div class="message emphasis">', '</div>');
+
+    // Progress information
+    $progress = !empty($importData['importProgress']) ? json_decode($importData['importProgress'], true) : [];
+    
+    if (!empty($progress['errors'])) {
+        $row = $form->addRow();
+            $row->addHeading(__('Errors'))->addClass('text-red-600');
+
+        foreach ($progress['errors'] as $error) {
+            $row = $form->addRow();
+                $row->addAlert($error, 'error');
+        }
+    }
+
+    if (!empty($progress['warnings'])) {
+        $row = $form->addRow();
+            $row->addHeading(__('Warnings'))->addClass('text-yellow-600');
+
+        foreach ($progress['warnings'] as $warning) {
+            $row = $form->addRow();
+                $row->addAlert($warning, 'warning');
+        }
+    }
+
+    // Add buttons
+    $row = $form->addRow();
+        $row->addFooter();
+        if (empty($progress['errors']) || $importData['ignoreErrors'] == 'Y') {
+            $row->addSubmit(__('Proceed to Live Run'));
+        }
+
+    echo $form->getOutput();
+
+    // Perform dry run if not already done
+    if ($progress['stage'] != 'DryRun') {
+        $studentData = json_decode($importData['studentData'], true);
+        $dryRunResult = $importProcessor->dryRun($studentData, [
+            'mode' => $importData['mode'],
+            'ignoreErrors' => $importData['ignoreErrors']
+        ]);
+
+        // Update progress
+        $progress = [
+            'stage' => 'DryRun',
+            'status' => 'Complete',
+            'errors' => $dryRunResult['errors'] ?? [],
+            'warnings' => $dryRunResult['warnings'] ?? []
+        ];
+        $transferImportGateway->update($studentTransferImportID, ['importProgress' => json_encode($progress)]);
+
+        // Refresh the page to show results
+        echo "<script>window.location.reload();</script>";
+    }
+
+} elseif ($step == 4) {
+    // STEP 4: LIVE RUN
+    if (empty($studentTransferImportID)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    // Get import data
+    $importData = $transferImportGateway->getByID($studentTransferImportID);
+    if (empty($importData)) {
+        $page->addError(__('The specified record cannot be found.'));
+        return;
+    }
+
+    // Create the form
+    $form = Form::create('importLiveRun', '');
+    $form->setTitle(__('Live Run'));
+
+    // Add description
+    $row = $form->addRow();
+        $row->addContent(__('The system is now importing the student data. This process may take a few minutes.'))
+            ->wrap('<div class="message emphasis">', '</div>');
+
+    // Progress information
+    $progress = !empty($importData['importProgress']) ? json_decode($importData['importProgress'], true) : [];
+
+    // Progress bar
+    $progressBar = '<div class="progress-bar stripes" style="width: 100%;">';
+    $progressBar .= '<div class="progress-bar-fill" style="width: '.($progress['status'] == 'Complete' ? '100%' : '0%').'">';
+    $progressBar .= '<span class="progress-bar-text">'.__($progress['status']).'</span>';
+    $progressBar .= '</div></div>';
+
+    $row = $form->addRow();
+        $row->addContent($progressBar)
+            ->wrap('<div class="w-full">', '</div>');
+
+    // Display errors and warnings
+    if (!empty($progress['errors'])) {
+        $row = $form->addRow();
+            $row->addHeading(__('Errors'))->addClass('text-red-600');
+
+        foreach ($progress['errors'] as $error) {
+            $row = $form->addRow();
+                $row->addAlert($error, 'error');
+        }
+    }
+
+    if (!empty($progress['warnings'])) {
+        $row = $form->addRow();
+            $row->addHeading(__('Warnings'))->addClass('text-yellow-600');
+
+        foreach ($progress['warnings'] as $warning) {
+            $row = $form->addRow();
+                $row->addAlert($warning, 'warning');
+        }
+    }
+
+    // Display buttons based on status
+    if ($progress['status'] == 'Complete') {
+        $row = $form->addRow();
+            $row->addContent('<div class="flex justify-end gap-2">');
+        
+        if (!empty($progress['imported'])) {
+            $row->addContent('<a href="'.$session->get('absoluteURL').'/index.php?q=/modules/Students/applicationForm_manage.php" class="button">View Applications</a>');
+        }
+        
+        $row->addContent('<a href="'.$session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage.php" class="button">Done</a>');
+        $row->addContent('</div>');
+    }
+
+    echo $form->getOutput();
+
+    // Perform live run if not already done
+    if ($progress['stage'] != 'LiveRun') {
+        $studentData = json_decode($importData['studentData'], true);
+        $liveRunResult = $importProcessor->liveRun($studentData, [
+            'mode' => $importData['mode'],
+            'ignoreErrors' => $importData['ignoreErrors']
+        ]);
+
+        // Update progress
+        $progress = [
+            'stage' => 'LiveRun',
+            'status' => 'Complete',
+            'errors' => $liveRunResult['errors'] ?? [],
+            'warnings' => $liveRunResult['warnings'] ?? [],
+            'imported' => $liveRunResult['imported'] ?? 0
+        ];
+        
+        // Update import record
+        $transferImportGateway->update($studentTransferImportID, [
+            'importProgress' => json_encode($progress),
+            'status' => 'Complete'
+        ]);
+
+        // Send notifications if enabled
+        if ($importData['notifyUsers'] == 'Y') {
+            $notificationService->sendTransferNotification(
+                $studentTransferImportID,
+                'import',
+                ['count' => $progress['imported']]
+            );
+        }
+
+        // Refresh the page to show results
+        echo "<script>window.location.reload();</script>";
+    } else {
+        // Auto-refresh if not complete
+        if ($progress['status'] != 'Complete') {
+            echo "<script>setTimeout(function() { window.location.reload(); }, 2000);</script>";
         }
     }
 }

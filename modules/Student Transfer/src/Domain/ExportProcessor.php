@@ -64,13 +64,32 @@ class ExportProcessor
             $metadata = [
                 'timestamp' => date('Y-m-d H:i:s'),
                 'source' => $this->settingGateway->getSettingByScope('System', 'organisationName'),
-                'version' => '1.0'
+                'version' => '1.0',
+                'publicKey' => $this->securityService->getPublicKey() // Use proper public key for verification
             ];
             file_put_contents($tempDir . '/metadata.json', json_encode($metadata, JSON_PRETTY_PRINT));
 
+            // Create manifest with checksums and signatures
+            $manifest = ['files' => []];
+            foreach (glob($tempDir . '/*') as $file) {
+                if (is_file($file)) {
+                    $relativePath = basename($file);
+                    $manifest['files'][$relativePath] = [
+                        'checksum' => hash_file('sha256', $file),
+                        'signature' => $this->securityService->createDigitalSignature($file)
+                    ];
+                }
+            }
+            file_put_contents($tempDir . '/manifest.json', json_encode($manifest, JSON_PRETTY_PRINT));
+
             // Create secure ZIP
             $zipFile = sys_get_temp_dir() . "/transfer_{$studentID}.zip";
-            $this->securityService->createSecureZip($tempDir, $zipFile);
+            $zipInfo = $this->securityService->createSecureZip($tempDir, $zipFile);
+
+            // Store password securely for later retrieval
+            if (!$this->securityService->storeTransferPassword($studentID, $zipInfo['password'])) {
+                throw new \RuntimeException('Failed to store transfer password');
+            }
 
             // Clean up
             $this->cleanupTempFiles($tempDir);

@@ -54,24 +54,33 @@ try {
         die(__('Too many download attempts. Please wait and try again later.'));
     }
 
-    // Get the transfer details
+    // Get transfer record
     $transfer = $transferGateway->getByID($transferID);
+    error_log("Student Transfer Debug: Transfer record: " . json_encode($transfer));
+
     if (empty($transfer)) {
-        error_log("Student Transfer: Invalid transfer ID $transferID requested from IP: $clientIP");
-        die(__('The requested transfer cannot be found.'));
+        error_log("Student Transfer: Transfer record not found: $transferID");
+        die(__('Invalid transfer ID. Please contact the sending school for assistance.'));
     }
 
-    // Validate the download token
-    if (!$securityService->verifyDownloadToken($transferID, $token, $transfer['downloadExpiry'])) {
-        // Log failed attempt
+    // Construct the correct file path
+    $zipFile = $session->get('absolutePath').'/uploads/transfers/'.$transferID.'.zip';
+    
+    // Check if file exists
+    if (!file_exists($zipFile)) {
+        error_log("Student Transfer: ZIP file not found: $zipFile");
+        die(__('The transfer file is no longer available. Please contact the sending school to generate a new export.'));
+    }
+
+    // Verify token and expiry
+    if ($transfer['downloadToken'] !== $token) {
         error_log("Student Transfer: Invalid token for transfer $transferID from IP: $clientIP");
-        $transferGateway->logDownloadAttempt($transferID, [
-            'ipAddress' => $clientIP,
-            'userAgent' => $_SERVER['HTTP_USER_AGENT'],
-            'timestamp' => date('Y-m-d H:i:s'),
-            'success' => 0
-        ]);
-        die(__('This download link has expired or is invalid. Please contact the sending school for a new link.'));
+        die(__('Invalid download token. Please contact the sending school for assistance.'));
+    }
+
+    if (strtotime($transfer['downloadExpiry']) < time()) {
+        error_log("Student Transfer: Expired download link for transfer $transferID");
+        die(__('This download link has expired. Please contact the sending school for assistance.'));
     }
 
     // If no password provided, show password form
@@ -120,14 +129,12 @@ try {
     }
 
     // Get plain password from database and verify
-    $transfer = $transferGateway->getByID($transferID);
     $correctPassword = $transfer['packagePasswordPlain'] ?? '';
 
     // Debug logging
     error_log("Student Transfer Debug: Comparing passwords for transfer $transferID");
     error_log("Student Transfer Debug: Entered password: " . $password);
     error_log("Student Transfer Debug: Stored password: " . $correctPassword);
-    error_log("Student Transfer Debug: Transfer record: " . json_encode($transfer));
 
     if (empty($correctPassword) || $password !== $correctPassword) {
         // Log failed attempt
@@ -184,15 +191,7 @@ try {
         exit();
     }
 
-    // Get the file path
-    $zipFile = sys_get_temp_dir() . '/student_transfer_' . $transferID . '.zip';
-    
     // Validate file
-    if (!file_exists($zipFile)) {
-        error_log("Student Transfer: ZIP file not found: $zipFile");
-        die(__('The transfer file is no longer available. Please contact the sending school to generate a new export.'));
-    }
-
     if (!is_readable($zipFile)) {
         error_log("Student Transfer: ZIP file not readable: $zipFile (Permissions: " . decoct(fileperms($zipFile)) . ")");
         die(__('Unable to access the transfer file. Please contact your system administrator.'));

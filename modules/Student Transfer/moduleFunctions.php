@@ -16,6 +16,7 @@ use Gibbon\Domain\Students\MedicalGateway;
 use Gibbon\Domain\Students\FirstAidGateway;
 use Gibbon\Domain\System\CustomFieldGateway;
 use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
+use Gibbon\Module\StudentTransfer\Domain\TransferImportGateway;
 use Gibbon\Module\StudentTransfer\Domain\SecurityService;
 use Gibbon\Module\StudentTransfer\Domain\StudentExporter;
 use Gibbon\Session\Session;
@@ -29,23 +30,40 @@ global $container;
 $container->add(TransferGateway::class)
     ->addArgument(Connection::class);
 
+// Register the TransferImportGateway
+$container->add(TransferImportGateway::class)
+    ->addArgument(Connection::class);
+
 // Register the SecurityService
 $container->add(SecurityService::class)
     ->addArgument(Connection::class)
     ->addArgument(SettingGateway::class);
 
-// Register the StudentExporter with all its dependencies
-$container->add(StudentExporter::class)
-    ->addArgument(Connection::class)
-    ->addArgument(SettingGateway::class)
-    ->addArgument(StudentGateway::class)
-    ->addArgument(FacilityGateway::class)
-    ->addArgument(UserGateway::class)
-    ->addArgument(CustomFieldGateway::class)
-    ->addArgument(MedicalGateway::class)
-    ->addArgument(FirstAidGateway::class)
-    ->addArgument(Session::class)
-    ->addArgument(SecurityService::class);
+/**
+ * Register StudentExporter dependencies - only call this when needed
+ * This function is used to delay loading of heavy dependencies until they are required
+ * 
+ * @return void
+ */
+function registerStudentExporter()
+{
+    global $container;
+    
+    // Only register if not already registered
+    if (!$container->has(StudentExporter::class)) {
+        $container->add(StudentExporter::class)
+            ->addArgument(Connection::class)
+            ->addArgument(SettingGateway::class)
+            ->addArgument(StudentGateway::class)
+            ->addArgument(FacilityGateway::class)
+            ->addArgument(UserGateway::class)
+            ->addArgument(CustomFieldGateway::class)
+            ->addArgument(MedicalGateway::class)
+            ->addArgument(FirstAidGateway::class)
+            ->addArgument(Session::class)
+            ->addArgument(SecurityService::class);
+    }
+}
 
 /**
  * Student Transfer Module Helper Functions

@@ -10,6 +10,10 @@ System checks for potential duplicates by:
 Name matching
 Date of birth
 Previous school
+Attendance record
+Grades
+Behaviour
+files uploaded
 Shows warnings if duplicates found
 
 1. Data Preview:

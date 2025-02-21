@@ -120,10 +120,10 @@ class StudentExporter
 
             // Create metadata.json
             $metadata = [
-                'exportTimestamp' => date('Y-m-d H:i:s'),
-                'transferID' => $transferID,
-                'sourceSchool' => $this->settingGateway->getSettingByScope('System', 'organisationName'),
-                'version' => '1.0.0'
+                'timestamp' => date('Y-m-d H:i:s'),
+                'source' => $this->settingGateway->getSettingByScope('System', 'organisationName'),
+                'version' => '1.0.00',  // Updated to match required x.x.xx format
+                'publicKey' => $this->securityService->getPublicKey()
             ];
             $metadataFile = $tempDir . '/metadata.json';
             if (file_put_contents($metadataFile, json_encode($metadata, JSON_PRETTY_PRINT)) === false) {
@@ -157,74 +157,124 @@ class StudentExporter
                 error_log("Student Transfer Debug: Generated new password for transfer $transferID: $password");
             }
             
-            // Create password-protected ZIP file
-            $zipFile = $tempDir . '.zip';
+            // Create and open ZIP file
             $zip = new ZipArchive();
-            $zipResult = $zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+            $result = $zip->open($tempDir . '.zip', ZipArchive::CREATE | ZipArchive::OVERWRITE);
             
-            if ($zipResult !== true) {
-                throw new \RuntimeException('Failed to create ZIP archive: ' . $this->getZipErrorMessage($zipResult));
+            if ($result !== true) {
+                throw new \RuntimeException($this->getZipErrorMessage($result));
             }
 
             try {
-                // Enable encryption
+                // Set password before adding files
                 if (!$zip->setPassword($password)) {
-                    throw new \RuntimeException('Failed to set ZIP password. Your PHP ZIP extension may not support encryption.');
+                    throw new \RuntimeException('Failed to set ZIP password');
                 }
-                
-                // Add files with encryption
-                $zip->setEncryptionName('student_data.json', ZipArchive::EM_AES_256);
-                $zip->setEncryptionName('metadata.json', ZipArchive::EM_AES_256);
-                $zip->setEncryptionName('manifest.json', ZipArchive::EM_AES_256);
-                
-                $zip->addFile($jsonFile, 'student_data.json');
-                $zip->addFile($metadataFile, 'metadata.json');
-                $zip->addFile($manifestFile, 'manifest.json');
 
-                // Add attachments if any
-                if (!empty($data['attachments'])) {
+                // Add files to ZIP
+                $files = [
+                    'student_data.json',
+                    'metadata.json',
+                    'manifest.json'
+                ];
+
+                foreach ($files as $file) {
+                    if (!$zip->addFile($tempDir.'/'.$file, $file)) {
+                        throw new \RuntimeException("Failed to add file to ZIP: $file");
+                    }
+                    // Encrypt this file
+                    if (!$zip->setEncryptionName($file, ZipArchive::EM_AES_256)) {
+                        throw new \RuntimeException("Failed to encrypt file in ZIP: $file");
+                    }
+                }
+
+                // Add attachments if they exist
+                if (is_dir($tempDir.'/attachments')) {
                     $zip->addEmptyDir('attachments');
-                    foreach ($data['attachments'] as $attachment) {
-                        if (file_exists($attachment['path'])) {
-                            $zip->setEncryptionName('attachments/' . basename($attachment['path']), ZipArchive::EM_AES_256);
-                            $zip->addFile($attachment['path'], 'attachments/' . basename($attachment['path']));
-                            
-                            // Add attachment signature to manifest
-                            $manifest['files']['attachments/' . basename($attachment['path'])] = [
-                                'checksum' => hash_file('sha256', $attachment['path']),
-                                'signature' => $this->securityService->createDigitalSignature($attachment['path'])
-                            ];
+                    
+                    $attachments = new \RecursiveIteratorIterator(
+                        new \RecursiveDirectoryIterator($tempDir.'/attachments'),
+                        \RecursiveIteratorIterator::LEAVES_ONLY
+                    );
+
+                    foreach ($attachments as $file) {
+                        if (!$file->isDir()) {
+                            $filePath = $file->getRealPath();
+                            $relativePath = 'attachments/' . substr($filePath, strlen($tempDir.'/attachments/') + 1);
+                            if (!$zip->addFile($filePath, $relativePath)) {
+                                throw new \RuntimeException("Failed to add attachment to ZIP: {$file->getFilename()}");
+                            }
+                            // Encrypt this attachment
+                            if (!$zip->setEncryptionName($relativePath, ZipArchive::EM_AES_256)) {
+                                throw new \RuntimeException("Failed to encrypt attachment in ZIP: {$file->getFilename()}");
+                            }
                         }
                     }
-                    // Update manifest with attachment signatures
-                    file_put_contents($manifestFile, json_encode($manifest, JSON_PRETTY_PRINT));
-                    $zip->addFile($manifestFile, 'manifest.json');
+                }
+
+                // Close the ZIP file before verification
+                if (!$zip->close()) {
+                    throw new \RuntimeException('Failed to finalize ZIP file');
                 }
             } finally {
-                $zip->close();
+                // No need to close here since we already closed it
             }
-
-            // Generate or reuse download token
-            if ($existingToken && !empty($existingToken['token']) && !empty($existingToken['expiry'])) {
-                $token = $existingToken['token'];
-                $expiry = $existingToken['expiry'];
-            } else {
-                $tokenData = $this->securityService->generateDownloadToken($transferID);
-                $token = $tokenData['token'];
-                $expiry = $tokenData['expiry'];
-            }
-
-            return [
-                'path' => $zipFile,
-                'password' => $password,
-                'passwordHash' => password_hash($password, PASSWORD_DEFAULT),
-                'token' => $token,
-                'expiry' => $expiry
-            ];
         } finally {
             // Clean up temporary files
             $this->cleanupTempDir($tempDir);
         }
+
+        // Move to final location
+        $finalDir = $this->session->get('absolutePath').'/uploads/transfers';
+        
+        // Create directory if it doesn't exist
+        if (!is_dir($finalDir)) {
+            if (!mkdir($finalDir, 0755, true)) {
+                throw new \RuntimeException('Failed to create uploads directory. Please check directory permissions.');
+            }
+        }
+
+        // Ensure directory is writable
+        if (!is_writable($finalDir)) {
+            // Try to set permissions
+            if (!chmod($finalDir, 0755)) {
+                throw new \RuntimeException('Uploads directory is not writable. Please set correct permissions on: ' . $finalDir);
+            }
+        }
+
+        $finalPath = $finalDir.'/'.$transferID.'.zip';
+        
+        // If file exists, ensure it's writable
+        if (file_exists($finalPath) && !is_writable($finalPath)) {
+            if (!chmod($finalPath, 0644)) {
+                throw new \RuntimeException('Cannot overwrite existing file. Please check file permissions.');
+            }
+        }
+
+        // Use copy and unlink instead of rename for better cross-device support
+        if (!copy($tempDir . '.zip', $finalPath)) {
+            throw new \RuntimeException('Failed to copy ZIP file to final location. Please check directory permissions.');
+        }
+        unlink($tempDir . '.zip');
+
+        // Generate or reuse download token
+        if ($existingToken && !empty($existingToken['token']) && !empty($existingToken['expiry'])) {
+            $token = $existingToken['token'];
+            $expiry = $existingToken['expiry'];
+        } else {
+            $tokenData = $this->securityService->generateDownloadToken($transferID);
+            $token = $tokenData['token'];
+            $expiry = $tokenData['expiry'];
+        }
+
+        // Return the file path and password
+        return [
+            'path' => $finalPath,
+            'password' => $password,
+            'passwordHash' => password_hash($password, PASSWORD_DEFAULT),
+            'token' => $token,
+            'expiry' => $expiry
+        ];
     }
 
     /**
