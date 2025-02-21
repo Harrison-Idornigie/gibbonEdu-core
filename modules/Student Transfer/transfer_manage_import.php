@@ -136,72 +136,130 @@ if ($step == 1) {
     // STUDENT DETAILS
     $form->addRow()->addHeading(__('Student Details'));
 
-    $row = $form->addRow();
+    // Basic Information
+    $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+    
+    $row = $table->addRow();
         $row->addLabel('fullName', __('Full Name'));
         $row->addTextField('fullName')
-            ->setValue($studentData['personal']['surname'] . ', ' . $studentData['personal']['firstName'])
+            ->setValue($studentData['personal']['officialName'])
             ->readonly();
 
-    $row = $form->addRow();
+    $row = $table->addRow();
+        $row->addLabel('preferredName', __('Preferred Name'));
+        $row->addTextField('preferredName')
+            ->setValue($studentData['personal']['preferredName'])
+            ->readonly();
+
+    $row = $table->addRow();
+        $row->addLabel('gender', __('Gender'));
+        $row->addTextField('gender')
+            ->setValue($studentData['personal']['gender'])
+            ->readonly();
+
+    $row = $table->addRow();
         $row->addLabel('dob', __('Date of Birth'));
         $row->addDate('dob')
             ->setValue($studentData['personal']['dob'])
             ->readonly();
 
+    // Contact Information
+    $form->addRow()->addSubheading(__('Contact Information'));
+    $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+
+    $row = $table->addRow();
+        $row->addLabel('email', __('Email'));
+        $row->addTextField('email')
+            ->setValue($studentData['personal']['email'])
+            ->readonly();
+
+    if (!empty($studentData['personal']['emailAlternate'])) {
+        $row = $table->addRow();
+            $row->addLabel('emailAlternate', __('Alternate Email'));
+            $row->addTextField('emailAlternate')
+                ->setValue($studentData['personal']['emailAlternate'])
+                ->readonly();
+    }
+
+    if (!empty($studentData['personal']['phone1'])) {
+        $row = $table->addRow();
+            $row->addLabel('phone1', __('Phone 1'));
+            $row->addTextField('phone1')
+                ->setValue($studentData['personal']['phone1'])
+                ->readonly();
+    }
+
+    if (!empty($studentData['personal']['phone2'])) {
+        $row = $table->addRow();
+            $row->addLabel('phone2', __('Phone 2'));
+            $row->addTextField('phone2')
+                ->setValue($studentData['personal']['phone2'])
+                ->readonly();
+    }
+
+    // Background Information
+    $form->addRow()->addSubheading(__('Background Information'));
+    $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+
+    $backgroundFields = [
+        'countryOfBirth' => __('Country of Birth'),
+        'ethnicity' => __('Ethnicity'),
+        'religion' => __('Religion'),
+        'citizenship1' => __('Citizenship 1'),
+        'citizenship2' => __('Citizenship 2')
+    ];
+
+    foreach ($backgroundFields as $field => $label) {
+        $row = $table->addRow();
+            $row->addLabel($field, $label);
+            $row->addTextField($field)
+                ->setValue($studentData['personal'][$field])
+                ->readonly();
+    }
+
     // ACADEMIC DETAILS
     $form->addRow()->addHeading(__('Academic Details'));
+    $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
 
-    $row = $form->addRow();
+    $row = $table->addRow();
         $row->addLabel('previousSchool', __('Previous School'));
         $row->addTextField('previousSchool')
             ->setValue($importData['schoolNameFrom'])
             ->readonly();
 
-    if (!empty($studentData['academic'])) {
-        $col = $form->addRow()->addColumn();
-        $col->addContent('<h4>'.__('Academic Information').'</h4>');
-        
-        $table = $col->addTable()->setClass('smallIntBorder w-full');
-        $header = $table->addHeaderRow();
-        $header->addContent(__('Year Group'));
-        $header->addContent(__('Form Group'));
+    $row = $table->addRow();
+        $row->addLabel('yearGroup', __('Year Group'));
+        $row->addTextField('yearGroup')
+            ->setValue($studentData['academic']['yearGroup']['name'])
+            ->readonly();
 
-        $row = $table->addRow();
-        $row->addContent($studentData['academic']['yearGroup']['name'] ?? '');
-        $row->addContent($studentData['academic']['formGroup']['name'] ?? '');
-    }
+    $row = $table->addRow();
+        $row->addLabel('formGroup', __('Form Group'));
+        $row->addTextField('formGroup')
+            ->setValue($studentData['academic']['formGroup']['name'])
+            ->readonly();
 
-    // Display grades if available
-    if (!empty($studentData['grades'])) {
-        $col = $form->addRow()->addColumn();
-        $col->addContent('<h4>'.__('Academic Records').'</h4>');
-        
-        $table = $col->addTable()->setClass('smallIntBorder w-full');
-        $header = $table->addHeaderRow();
-        $header->addContent(__('Subject'));
-        $header->addContent(__('Grade'));
-        $header->addContent(__('Date'));
-
-        foreach ($studentData['grades'] as $record) {
-            $row = $table->addRow();
-            $row->addContent($record['subject'] ?? '');
-            $row->addContent($record['grade'] ?? '');
-            $row->addContent(!empty($record['date']) ? Format::date($record['date']) : '');
-        }
-    }
-
-    // MEDICAL DETAILS
-    if (!empty($studentData['medical'])) {
-        $form->addRow()->addHeading(__('Medical Information'));
-        
-        $col = $form->addRow()->addColumn();
-        
+    // MEDICAL INFORMATION
+    $form->addRow()->addHeading(__('Medical Information'));
+    
+    if (!empty($studentData['medical']['conditions']) || !empty($studentData['medical']['firstAid'])) {
         if (!empty($studentData['medical']['conditions'])) {
-            $col->addContent('<h4>'.__('Medical Conditions').'</h4>');
+            $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+            $table->addHeaderRow()->addContent(__('Medical Conditions'));
             foreach ($studentData['medical']['conditions'] as $condition) {
-                $col->addAlert($condition['name'], 'warning');
+                $table->addRow()->addContent($condition);
             }
         }
+
+        if (!empty($studentData['medical']['firstAid'])) {
+            $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+            $table->addHeaderRow()->addContent(__('First Aid'));
+            foreach ($studentData['medical']['firstAid'] as $firstAid) {
+                $table->addRow()->addContent($firstAid);
+            }
+        }
+    } else {
+        $form->addRow()->addAlert(__('No medical information recorded.'), 'message');
     }
 
     // FAMILY INFORMATION
