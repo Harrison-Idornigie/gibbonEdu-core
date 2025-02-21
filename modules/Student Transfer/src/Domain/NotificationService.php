@@ -50,13 +50,27 @@ class NotificationService
      */
     public function sendNotification($users, $text, $moduleName, $actionLink)
     {
+        if (empty($users)) return;
+
+        // Get module ID
+        $sql = "SELECT gibbonModuleID FROM gibbonModule WHERE name=:name";
+        $moduleID = $this->pdo->selectOne($sql, ['name' => $moduleName]);
+
+        // Create notifications
         foreach ($users as $gibbonPersonID) {
-            $this->notificationGateway->insert([
+            $data = [
                 'gibbonPersonID' => $gibbonPersonID,
                 'text' => $text,
-                'moduleName' => $moduleName,
-                'actionLink' => $actionLink
-            ]);
+                'actionLink' => $actionLink,
+                'gibbonModuleID' => $moduleID['gibbonModuleID'] ?? null,
+                'timestamp' => date('Y-m-d H:i:s'),
+                'status' => 'New'
+            ];
+
+            $fields = implode(',', array_keys($data));
+            $values = ':'.implode(',:', array_keys($data));
+            $sql = "INSERT INTO gibbonNotification ($fields) VALUES ($values)";
+            $this->pdo->insert($sql, $data);
         }
     }
 
