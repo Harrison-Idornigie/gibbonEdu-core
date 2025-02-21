@@ -239,9 +239,75 @@ if ($step == 1) {
             ->setValue($studentData['academic']['formGroup']['name'])
             ->readonly();
 
+    // GRADES
+    if (!empty($studentData['grades'])) {
+        $form->addRow()->addHeading(__('Academic Grades'));
+        $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+        
+        $header = $table->addHeaderRow();
+            $header->addContent(__('Course'));
+            $header->addContent(__('Grade'));
+            $header->addContent(__('Effort'));
+            $header->addContent(__('Comment'));
+            
+        foreach ($studentData['grades'] as $grade) {
+            $row = $table->addRow();
+                $row->addContent($grade['course'] ?? '');
+                $row->addContent($grade['grade'] ?? '');
+                $row->addContent($grade['effort'] ?? '');
+                $row->addContent($grade['comment'] ?? '');
+        }
+    }
+
+    // BEHAVIOR RECORDS
+    if (!empty($studentData['behavior'])) {
+        $form->addRow()->addHeading(__('Behavior Records'));
+        $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+        
+        $header = $table->addHeaderRow();
+            $header->addContent(__('Date'));
+            $header->addContent(__('Type'));
+            $header->addContent(__('Descriptor'));
+            $header->addContent(__('Level'));
+            $header->addContent(__('Comment'));
+            
+        foreach ($studentData['behavior'] as $record) {
+            $row = $table->addRow();
+                $row->addContent(!empty($record['date']) ? Format::date($record['date']) : '');
+                $row->addContent($record['type'] ?? '');
+                $row->addContent($record['descriptor'] ?? '');
+                $row->addContent($record['level'] ?? '');
+                $row->addContent($record['comment'] ?? '');
+        }
+    }
+
+    // ATTENDANCE RECORDS
+    if (!empty($studentData['attendance'])) {
+        $form->addRow()->addHeading(__('Attendance Records'));
+        $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
+        
+        $header = $table->addHeaderRow();
+            $header->addContent(__('Date'));
+            $header->addContent(__('Type'));
+            $header->addContent(__('Status'));
+            $header->addContent(__('Reason'));
+            $header->addContent(__('Context'));
+            $header->addContent(__('Comment'));
+            
+        foreach ($studentData['attendance'] as $record) {
+            $row = $table->addRow();
+                $row->addContent(!empty($record['date']) ? Format::date($record['date']) : '');
+                $row->addContent($record['type'] ?? '');
+                $row->addContent($record['code']['name'] ?? '');
+                $row->addContent($record['reason'] ?? '');
+                $row->addContent($record['context'] ?? '');
+                $row->addContent($record['comment'] ?? '');
+        }
+    } else {
+        $form->addRow()->addAlert(__('No attendance records found.'), 'message');
+    }
+
     // MEDICAL INFORMATION
-    $form->addRow()->addHeading(__('Medical Information'));
-    
     if (!empty($studentData['medical']['conditions']) || !empty($studentData['medical']['firstAid'])) {
         if (!empty($studentData['medical']['conditions'])) {
             $table = $form->addRow()->addTable()->setClass('smallIntBorder w-full');
