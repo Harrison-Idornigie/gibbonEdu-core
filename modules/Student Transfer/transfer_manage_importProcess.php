@@ -42,7 +42,7 @@ $notifyUsers = $_POST['notifyUsers'] ?? 'Y';
 $confirmDuplicates = $_POST['confirmDuplicates'] ?? 'N';
 
 // Validate the step
-if (empty($step) || !in_array($step, ['1', '2'])) {
+if (empty($step) || !in_array($step, ['1', '2', '3', '4'])) {
     $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&return=error1';
     header("Location: {$URL}");
     exit;
@@ -202,33 +202,90 @@ try {
             exit;
         }
 
-        // Update progress
+        // Update progress to show we're moving to dry run
         $progress = [
-            'stage' => 'Preview',
-            'status' => 'Complete',
+            'stage' => 'DryRun',
+            'status' => 'Pending',
             'errors' => [],
             'warnings' => []
         ];
         $transferImportGateway->update($studentTransferImportID, ['importProgress' => json_encode($progress)]);
 
-        // Perform dry run and live run import
+        // Redirect to dry run step
+        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=3&studentTransferImportID='.$studentTransferImportID;
+        header("Location: {$URL}");
+        exit;
+    }
+
+    // STEP 3: DRY RUN
+    elseif ($step == '3') {
+        // Validate import record exists
+        if (empty($studentTransferImportID)) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error1';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Get import data
+        $importData = $transferImportGateway->getByID($studentTransferImportID);
+        if (empty($importData)) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error2';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Perform dry run
         $studentData = json_decode($importData['studentData'], true);
         $dryRunResult = $importProcessor->dryRun($studentData, [
             'mode' => $importData['mode'],
             'ignoreErrors' => $importData['ignoreErrors']
         ]);
 
+        // Update progress with dry run results
+        $progress = [
+            'stage' => 'DryRun',
+            'status' => 'Complete',
+            'errors' => $dryRunResult['errors'] ?? [],
+            'warnings' => $dryRunResult['warnings'] ?? []
+        ];
+        $transferImportGateway->update($studentTransferImportID, ['importProgress' => json_encode($progress)]);
+
+        // Redirect back to show results
+        $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=3&studentTransferImportID='.$studentTransferImportID;
+        header("Location: {$URL}");
+        exit;
+    }
+
+    // STEP 4: LIVE RUN
+    elseif ($step == '4') {
+        // Validate import record exists
+        if (empty($studentTransferImportID)) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error1';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Get import data
+        $importData = $transferImportGateway->getByID($studentTransferImportID);
+        if (empty($importData)) {
+            $URL = $session->get('absoluteURL').'/index.php?q=/modules/Student Transfer/transfer_manage_import.php&step=1&return=error2';
+            header("Location: {$URL}");
+            exit;
+        }
+
+        // Perform live run
+        $studentData = json_decode($importData['studentData'], true);
         $liveRunResult = $importProcessor->liveRun($studentData, [
             'mode' => $importData['mode'],
             'ignoreErrors' => $importData['ignoreErrors']
         ]);
 
-        // Update progress with dry run and live run results
+        // Update progress with live run results
         $progress = [
             'stage' => 'LiveRun',
             'status' => 'Complete',
-            'errors' => array_merge($dryRunResult['errors'] ?? [], $liveRunResult['errors'] ?? []),
-            'warnings' => array_merge($dryRunResult['warnings'] ?? [], $liveRunResult['warnings'] ?? []),
+            'errors' => $liveRunResult['errors'] ?? [],
+            'warnings' => $liveRunResult['warnings'] ?? [],
             'imported' => $liveRunResult['imported'] ?? 0
         ];
         $transferImportGateway->update($studentTransferImportID, [

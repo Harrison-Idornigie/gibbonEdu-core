@@ -13,6 +13,7 @@ use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
 use Gibbon\Module\StudentTransfer\Domain\ImportProcessor;
 use Gibbon\Module\StudentTransfer\Domain\SecurityService;
 use Gibbon\Module\StudentTransfer\Domain\TransferImportGateway;
+use Gibbon\Module\StudentTransfer\Domain\NotificationService;
 
 // Module includes
 require_once dirname(__FILE__) . '/../../gibbon.php';
@@ -23,6 +24,13 @@ if (!isActionAccessible($guid, $connection2, '/modules/Student Transfer/transfer
     $page->addError(__('You do not have access to this action.'));
     return;
 }
+
+// Initialize services
+$transferGateway = $container->get(TransferGateway::class);
+$transferImportGateway = $container->get(TransferImportGateway::class);
+$importProcessor = $container->get(ImportProcessor::class);
+$securityService = $container->get(SecurityService::class);
+$notificationService = $container->get(NotificationService::class);
 
 $page->breadcrumbs->add(__('Import Student Transfer'));
 
@@ -112,7 +120,6 @@ if ($step == 1) {
     }
 
     // Get import data
-    $transferImportGateway = $container->get(TransferImportGateway::class);
     $importData = $transferImportGateway->getByID($studentTransferImportID);
 
     if (empty($importData)) {

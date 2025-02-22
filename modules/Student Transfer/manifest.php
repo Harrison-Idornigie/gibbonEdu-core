@@ -220,12 +220,12 @@ $actionRows = [
         'categoryPermissionOther' => 'N'
     ],
     [
-        'name' => 'Import Student Transfer',
+        'name' => 'Manage Student Imports',
         'precedence' => '0',
         'category' => 'Student Data',
-        'description' => 'Import student data from transfer packages.',
-        'URLList' => 'transfer_manage_import.php,transfer_manage_importProcess.php,student_import_history.php,student_import_history_view.php',
-        'entryURL' => 'transfer_manage_import.php',
+        'description' => 'View and manage student transfer imports.',
+        'URLList' => 'student_import_manage.php,transfer_manage_import.php,transfer_manage_importProcess.php,student_import_history_view.php',
+        'entryURL' => 'student_import_manage.php',
         'entrySidebar' => 'Y',
         'menuShow' => 'Y',
         'defaultPermissionAdmin' => 'Y',

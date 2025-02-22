@@ -10,13 +10,20 @@ use Gibbon\Services\Format;
 use Gibbon\Domain\DataSet;
 use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
 
-if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_import_history.php") == false) {
+if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_import_manage.php") == false) {
     // Access denied
     $page->addError(__('You do not have access to this action.'));
 } else {
-    $page->breadcrumbs
-        ->add(__('Import Student Transfer'), 'transfer_manage_import.php')
-        ->add(__('Import History'));
+    $page->breadcrumbs->add(__('Manage Student Imports'));
+
+    // Add Import button
+    echo "<div class='flex justify-between items-center mb-4'>";
+    echo "<div></div>"; // Empty div for flex spacing
+    echo "<a href='".$session->get('absoluteURL')."/index.php?q=/modules/Student Transfer/transfer_manage_import.php' class='button'>";
+    echo "<img src='".$session->get('absoluteURL')."/themes/".$session->get('gibbonThemeName')."/img/icons/plus.png' class='w-4 h-4 mr-1'>";
+    echo __('Import Transferred Student');
+    echo "</a>";
+    echo "</div>";
 
     $transferGateway = $container->get(TransferGateway::class);
 
@@ -26,8 +33,8 @@ if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_i
 
     $transfers = $transferGateway->queryTransfers($criteria);
 
-    $table = DataTable::create('importHistory');
-    $table->setTitle(__('Import History'));
+    $table = DataTable::create('studentImports');
+    $table->setTitle(__('Student Imports'));
 
     $table->addColumn('timestamp', __('Date'))
         ->format(function($values) {
@@ -40,6 +47,13 @@ if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_i
         });
 
     $table->addColumn('schoolNameFrom', __('From School'));
+
+    $table->addColumn('studentName', __('Student'))
+        ->format(function($values) {
+            if (empty($values['importProgress'])) return '';
+            $progress = json_decode($values['importProgress'], true);
+            return $progress['metadata']['studentName'] ?? '';
+        });
 
     $table->addColumn('status', __('Status'))
         ->format(function($values) {
@@ -70,11 +84,22 @@ if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_i
         });
 
     $table->addActionColumn()
-        ->addParam('studentTransferLogID')
+        ->addParam('studentTransferImportID')
         ->format(function($values, $actions) {
             $actions->addAction('view', __('View'))
                 ->setURL('/modules/Student Transfer/student_import_history_view.php')
                 ->modalWindow(800, 550);
+
+            if (!empty($values['importProgress'])) {
+                $progress = json_decode($values['importProgress'], true);
+                if (!empty($progress['applicationID'])) {
+                    $actions->addAction('application', __('Application'))
+                        ->setURL('/index.php')
+                        ->addParam('q', '/modules/Students/applicationForm_manage_edit.php')
+                        ->addParam('gibbonApplicationFormID', $progress['applicationID'])
+                        ->setIcon('attendance');
+                }
+            }
         });
 
     echo $table->render($transfers);
