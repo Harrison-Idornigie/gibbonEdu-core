@@ -1,9 +1,7 @@
 <?php
 /*
 Gibbon: the flexible, open school platform
-Founded by Ross Parker at ICHK Secondary. Built by Ross Parker, Sandra Kuipers and the Gibbon community (https://gibbonedu.org/about/)
-Copyright 2010, Gibbon Foundation
-Gibbon, Gibbon Education Ltd. (Hong Kong)
+Copyright 2010, Ross Parker
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,11 +18,9 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
 use Gibbon\Forms\Form;
-use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
-use Gibbon\Domain\DataSet;
-use Gibbon\Domain\System\LogGateway;
-use Gibbon\Module\OpenAdminImport\Domain\OpenAdminImporter;
+use Gibbon\Tables\DataTable;
+use Gibbon\Module\OpenAdminImport\Domain\ImportGateway;
 
 // Module includes
 require_once __DIR__ . '/moduleFunctions.php';
@@ -34,108 +30,131 @@ if (isActionAccessible($guid, $connection2, '/modules/OpenAdminImport/oa_import_
     $page->addError(__('You do not have access to this action.'));
 } else {
     // Proceed!
-    $page->breadcrumbs->add(__('OpenAdmin Import'));
+    $page->breadcrumbs->add(__('Manage OAFS Import'));
 
-    // Get import types
-    $importTypes = [
-        'students' => [
-            'name' => __('Students'),
-            'category' => __('People'),
-            'description' => __('Import student data from OpenAdmin'),
-            'type' => 'openadmin_students',
-            'table' => 'gibbonPerson',
-            'mode' => ['insert' => 'Insert', 'update' => 'Update', 'sync' => 'Sync'],
-        ],
-        'staff' => [
-            'name' => __('Staff'),
-            'category' => __('People'),
-            'description' => __('Import staff data from OpenAdmin'),
-            'type' => 'openadmin_staff',
-            'table' => 'gibbonStaff',
-            'mode' => ['insert' => 'Insert', 'update' => 'Update', 'sync' => 'Sync'],
-        ],
-    ];
+    // Handle return messages
+    if (isset($_GET['return'])) {
+        $page->return->addReturns([
+            'error0' => __('Access denied.'),
+            'error1' => __('Import type not specified.'),
+            'error2' => __('No file was uploaded.'),
+            'error3' => __('Invalid file type. Please upload a CSV file.'),
+            'error4' => __('CSV validation failed. Please check the file format.'),
+            'error5' => __('An error occurred during import.'),
+            'success0' => __('Import completed successfully.'),
+            'success1' => __('Dry run completed successfully.'),
+            'warning1' => __('Import completed with some errors.')
+        ]);
+    }
 
-    // Get import history
-    $logGateway = $container->get(LogGateway::class);
-    $criteria = $logGateway->newQueryCriteria()
-        ->sortBy('timestamp', 'DESC')
-        ->fromPOST();
+    // Show any validation errors
+    if ($session->has('importValidationErrors')) {
+        $errors = $session->get('importValidationErrors');
+        $session->remove('importValidationErrors');
+        
+        $page->addAlert('error', __('Validation Errors:').'<br/>'.implode('<br/>', $errors));
+    }
 
-    $logs = $logGateway->queryLogs($criteria, 'OpenAdmin Import', null, 'Import - %');
+    // Show import results
+    if ($session->has('importResults')) {
+        $results = $session->get('importResults');
+        $session->remove('importResults');
 
-    // IMPORT TYPES TABLE
-    $table = DataTable::create('importTypes');
-    $table->setTitle(__('Available Imports'));
+        $alertType = $results['errors'] > 0 ? 'warning' : 'success';
+        $message = __('Import Results:').'<br/>';
+        $message .= sprintf(__('Successful: %d'), $results['success']).'<br/>';
+        $message .= sprintf(__('Errors: %d'), $results['errors']);
 
-    $table->addHeaderAction('history', __('Import History'))
-        ->setURL('/modules/OpenAdminImport/oa_import_history.php')
-        ->setIcon('clock')
-        ->displayLabel();
+        if (!empty($results['messages'])) {
+            $message .= '<br/><br/>'.__('Messages:').'<br/>'.implode('<br/>', $results['messages']);
+        }
 
-    $table->addColumn('category', __('Category'))
-        ->width('15%');
+        $page->addAlert($alertType, $message);
+    }
 
-    $table->addColumn('name', __('Name'))
-        ->width('20%')
-        ->format(function ($values) {
-            return Format::link('./index.php?q=/modules/OpenAdminImport/oa_import_run.php&type=' . urlencode($values['type']), $values['name']);
-        });
-
-    $table->addColumn('description', __('Description'));
-
-    $table->addColumn('lastImport', __('Last Import'))
-        ->format(function ($values) use ($logs) {
-            if ($log = $logs->getRow($values['type'])) {
-                return Format::relativeTime($log['timestamp']);
-            }
-            return Format::small(__('Never'));
-        });
-
-    $table->addActionColumn()
-        ->addParam('type')
-        ->format(function ($values, $actions) {
-            $actions->addAction('import', __('Import'))
-                ->setURL('/modules/OpenAdminImport/oa_import_run.php')
-                ->setIcon('page_white_get');
-        });
-
-    // Convert import types to dataset
-    $importTypeRows = array_map(function($type, $data) {
-        return ['type' => $type] + $data;
-    }, array_keys($importTypes), array_values($importTypes));
+    // Import form
+    $form = Form::create('importForm', $session->get('absoluteURL').'/modules/OpenAdminImport/oa_import_manageProcess.php');
+    $form->setTitle(__('Import Data'));
     
-    echo $table->render(new DataSet($importTypeRows));
-
-    // SETTINGS FORM
-    $form = Form::create('importSettings', $session->get('absoluteURL').'/modules/OpenAdminImport/oa_import_manageProcess.php');
-    $form->setTitle(__('Import Settings'));
-
     $form->addHiddenValue('address', $session->get('address'));
 
+    // Import mode selection
     $row = $form->addRow();
-        $row->addLabel('fieldDelimiter', __('Field Delimiter'));
-        $row->addTextField('fieldDelimiter')
-            ->setValue(',')
-            ->setTitle(__('Character used to separate fields in the CSV file'))
-            ->required();
+        $row->addLabel('importMode', __('Import Mode'));
+        $row->addSelect('importMode')
+            ->fromArray([
+                'single' => __('Single File'),
+                'batch' => __('Multiple Files')
+            ])
+            ->required()
+            ->placeholder()
+            ->addClass('importModeSelect');
+
+    // Single file import options
+    $form->toggleVisibilityByClass('singleImport')->onSelect('importMode')->when('single');
+    
+    $row = $form->addRow()->addClass('singleImport');
+        $row->addLabel('importType', __('Import Type'));
+        $row->addSelect('importType')
+            ->fromArray([
+                'staff' => __('Staff'),
+                'student' => __('Student')
+            ])
+            ->required()
+            ->placeholder();
+
+    $row = $form->addRow()->addClass('singleImport');
+        $row->addLabel('file', __('CSV File'));
+        $row->addFileUpload('file')
+            ->required()
+            ->accepts('.csv');
+
+    // Batch import options
+    $form->toggleVisibilityByClass('batchImport')->onSelect('importMode')->when('batch');
+
+    $row = $form->addRow()->addClass('batchImport');
+        $col = $row->addColumn();
+        $col->addLabel('files[]', __('CSV Files'))
+            ->description(__('You can upload multiple CSV files at once. The import type will be determined by the filename prefix (e.g. staff_*.csv or student_*.csv)'));
+        $col->addFileUpload('files[]')
+            ->required()
+            ->accepts('.csv')
+            ->setMultiple(true);
+
+    // Common options
+    $row = $form->addRow();
+        $row->addLabel('dryRun', __('Dry Run'))->description(__('Test the import without making any changes'));
+        $row->addCheckbox('dryRun')->setValue('Y');
 
     $row = $form->addRow();
-        $row->addLabel('stringEnclosure', __('String Enclosure'));
-        $row->addTextField('stringEnclosure')
-            ->setValue('"')
-            ->setTitle(__('Character used to enclose strings in the CSV file'))
-            ->required();
+        $row->addLabel('continueOnError', __('Continue on Error'))->description(__('Continue processing remaining records if an error occurs'));
+        $row->addCheckbox('continueOnError')->setValue('Y');
 
     $row = $form->addRow();
-        $row->addLabel('dryRun', __('Dry Run'));
-        $row->addYesNo('dryRun')
-            ->selected('N')
-            ->setTitle(__('Test the import without making any changes'));
-
-    $row = $form->addRow();
-        $row->addFooter();
-        $row->addSubmit();
+        $row->addSubmit(__('Import'));
 
     echo $form->getOutput();
+
+    // Recent imports table
+    $importGateway = $container->get(ImportGateway::class);
+    $criteria = $importGateway->newQueryCriteria()
+        ->sortBy(['timestampCreated'], 'DESC')
+        ->fromPOST();
+
+    $imports = $importGateway->queryImportLogs($criteria);
+
+    $table = DataTable::createPaginated('recentImports', $criteria);
+    $table->setTitle(__('Recent Imports'));
+
+    $table->addColumn('timestampCreated', __('Date'))
+        ->format(Format::using('dateTime'));
+    $table->addColumn('importType', __('Type'));
+    $table->addColumn('oafsImportLog.status', __('Status'));
+    $table->addColumn('recordCount', __('Records'));
+    $table->addColumn('successCount', __('Successful'));
+    $table->addColumn('errorCount', __('Errors'));
+
+    echo $table->render($imports);
+
+  
 }

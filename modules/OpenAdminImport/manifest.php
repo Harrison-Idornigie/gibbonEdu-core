@@ -19,44 +19,72 @@ You should have received a copy of the GNU General Public License
 along with this program. If not, see <http://www.gnu.org/licenses/>.
 */
 
+// Module manifest file for OpenAdminImport module
+
 // Basic module properties
-$name = 'OpenAdmin Import';
-$description = 'Import data from OpenAdmin (Sakas KOHC) into Gibbon.';
+$name = 'OpenAdminImport';
+$description = 'Import student and staff data from Open Admin for Schools (OAFS) CSV exports';
 $entryURL = 'oa_import_manage.php';
 $type = 'Additional';
 $category = 'Admin';
 $version = '1.0.00';
-$author = 'Harrison Idornigie';
+$author = 'Your Name';
 $url = '';
 
 // Module tables
 $moduleTables = [];
-$moduleTables[] = "CREATE TABLE `OpenAdminImportLog` (
-    `id` int(10) unsigned zerofill NOT NULL AUTO_INCREMENT,
-    `type` varchar(100) NOT NULL,
-    `name` varchar(100) NOT NULL,
-    `status` enum('Pending','Complete','Failed') NOT NULL DEFAULT 'Pending',
-    `recordCount` int(11) NOT NULL DEFAULT 0,
-    `importTime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `gibbonPersonID` int(10) unsigned zerofill NOT NULL,
-    `data` text DEFAULT NULL,
-    PRIMARY KEY (`id`),
-    KEY `type` (`type`),
+$moduleTables[] = "CREATE TABLE `oafsImportLog` (
+    `oafsImportLogID` int(10) unsigned NOT NULL AUTO_INCREMENT,
+    `importType` varchar(50) NOT NULL,
+    `status` varchar(20) NOT NULL,
+    `recordCount` int(10) NOT NULL DEFAULT 0,
+    `successCount` int(10) NOT NULL DEFAULT 0,
+    `errorCount` int(10) NOT NULL DEFAULT 0,
+    `messages` text DEFAULT NULL,
+    `gibbonPersonIDCreated` int(10) unsigned NULL,
+    `timestampCreated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`oafsImportLogID`),
+    KEY `importType` (`importType`),
     KEY `status` (`status`),
-    KEY `gibbonPersonID` (`gibbonPersonID`)
+    KEY `gibbonPersonIDCreated` (`gibbonPersonIDCreated`),
+    CONSTRAINT `oafsImportLog_ibfk_1` FOREIGN KEY (`gibbonPersonIDCreated`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+
+$moduleTables[] = "CREATE TABLE `oafsFieldMapping` (
+    `oafsFieldMappingID` int(10) unsigned NOT NULL AUTO_INCREMENT,
+    `importType` varchar(50) NOT NULL,
+    `sourceField` varchar(100) NOT NULL,
+    `targetField` varchar(100) NOT NULL,
+    `isRequired` enum('Y','N') NOT NULL DEFAULT 'N',
+    `defaultValue` varchar(255) DEFAULT NULL,
+    `transformationRule` text DEFAULT NULL,
+    `gibbonPersonIDCreated` int(10) unsigned NULL,
+    `timestampCreated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`oafsFieldMappingID`),
+    UNIQUE KEY `unique_mapping` (`importType`, `sourceField`),
+    KEY `importType` (`importType`),
+    KEY `gibbonPersonIDCreated` (`gibbonPersonIDCreated`),
+    CONSTRAINT `oafsFieldMapping_ibfk_1` FOREIGN KEY (`gibbonPersonIDCreated`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+
+// Module settings
+$gibbonSetting = [];
+$gibbonSetting[] = "INSERT INTO `gibbonSetting` 
+    (`scope`, `name`, `nameDisplay`, `description`, `value`) 
+    VALUES 
+    ('OpenAdminImport', 'csvDelimiter', 'CSV Delimiter', 'Default delimiter for CSV files', ','),
+    ('OpenAdminImport', 'csvEncoding', 'CSV Encoding', 'Default encoding for CSV files', 'UTF-8'),
+    ('OpenAdminImport', 'batchSize', 'Batch Size', 'Number of records to process in each batch', '100');";
 
 // Module actions
 $actionRows = [];
 $actionRows[] = [
-    'name' => 'Manage OpenAdmin Import',
+    'name' => 'Manage OAFS Import',
     'precedence' => '0',
     'category' => 'Import',
-    'description' => 'Import data from OpenAdmin (Sakas KOHC)',
-    'URLList' => 'oa_import_manage.php,oa_import_run.php',
+    'description' => 'Import data from Open Admin for Schools CSV exports',
+    'URLList' => 'oa_import_manage.php',
     'entryURL' => 'oa_import_manage.php',
-    'entrySidebar' => 'Y',
-    'menuShow' => 'Y',
     'defaultPermissionAdmin' => 'Y',
     'defaultPermissionTeacher' => 'N',
     'defaultPermissionStudent' => 'N',
@@ -65,27 +93,7 @@ $actionRows[] = [
     'categoryPermissionStaff' => 'Y',
     'categoryPermissionStudent' => 'N',
     'categoryPermissionParent' => 'N',
-    'categoryPermissionOther' => 'N',
-];
-
-$actionRows[] = [
-    'name' => 'View Import History',
-    'precedence' => '0',
-    'category' => 'Import',
-    'description' => 'View history of OpenAdmin imports',
-    'URLList' => 'oa_import_history.php,oa_import_history_view.php',
-    'entryURL' => 'oa_import_history.php',
-    'entrySidebar' => 'Y',
-    'menuShow' => 'Y',
-    'defaultPermissionAdmin' => 'Y',
-    'defaultPermissionTeacher' => 'N',
-    'defaultPermissionStudent' => 'N',
-    'defaultPermissionParent' => 'N',
-    'defaultPermissionSupport' => 'N',
-    'categoryPermissionStaff' => 'Y',
-    'categoryPermissionStudent' => 'N',
-    'categoryPermissionParent' => 'N',
-    'categoryPermissionOther' => 'N',
+    'categoryPermissionOther' => 'N'
 ];
 
 // Hooks
