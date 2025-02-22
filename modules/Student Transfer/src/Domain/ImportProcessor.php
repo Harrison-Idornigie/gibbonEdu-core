@@ -12,8 +12,11 @@ use Gibbon\Domain\User\UserGateway;
 use Gibbon\Domain\Students\StudentGateway;
 use Gibbon\Domain\Students\ApplicationFormGateway;
 use Gibbon\Domain\System\SettingGateway;
+use Gibbon\Domain\QueryableGateway;
+use Gibbon\Domain\Traits\TableAware;
 use Gibbon\Contracts\Database\Connection;
 use Gibbon\Services\Format;
+use PDO;
 
 /**
  * Import Processor
@@ -23,8 +26,14 @@ use Gibbon\Services\Format;
  * @version v1.0.00
  * @since   v1.0.00
  */
-class ImportProcessor
+class ImportProcessor extends QueryableGateway
 {
+    use TableAware;
+
+    private static $tableName = 'gibbonStudentTransferImport';
+    private static $primaryKey = 'gibbonStudentTransferImportID';
+    private static $searchableColumns = [''];
+
     protected $pdo;
     protected $userGateway;
     protected $studentGateway;
@@ -40,6 +49,7 @@ class ImportProcessor
         SettingGateway $settingGateway,
         SecurityService $securityService
     ) {
+        parent::__construct($pdo);
         $this->pdo = $pdo;
         $this->userGateway = $userGateway;
         $this->studentGateway = $studentGateway;
@@ -56,62 +66,51 @@ class ImportProcessor
     public function checkDuplicates(array $studentData): array
     {
         $duplicates = [];
-        
-        // Extract search criteria
-        $surname = $studentData['surname'] ?? '';
-        $firstName = $studentData['firstName'] ?? '';
-        $dob = $studentData['dob'] ?? '';
-        $previousSchool = $studentData['schoolNameFrom'] ?? '';
-        
-        if (empty($surname) || empty($firstName) || empty($dob)) {
+
+        if (empty($studentData['personal'])) {
             return $duplicates;
         }
 
         // Check by name and DOB
-        $sql = "SELECT gibbonPerson.gibbonPersonID, surname, firstName, dob, previousSchool,
+        $sql = "SELECT gibbonPerson.gibbonPersonID, surname, firstName, dob, schoolName1,
                        gibbonStudentEnrolment.gibbonSchoolYearID,
                        (SELECT name FROM gibbonSchoolYear WHERE gibbonSchoolYearID=gibbonStudentEnrolment.gibbonSchoolYearID) as schoolYear
                 FROM gibbonPerson 
-                JOIN gibbonStudentEnrolment ON gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID 
-                WHERE (surname=:surname AND firstName=:firstName)
-                OR (dob=:dob AND (surname=:surname OR firstName=:firstName))";
-        
+                LEFT JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
+                WHERE surname=:surname 
+                AND firstName=:firstName";
+
         $result = $this->pdo->select($sql, [
-            'surname' => $surname,
-            'firstName' => $firstName,
-            'dob' => $dob
+            'surname' => $studentData['personal']['surname'],
+            'firstName' => $studentData['personal']['firstName']
         ]);
 
-        if (!empty($result)) {
+        if ($result && $result->rowCount() > 0) {
             foreach ($result as $match) {
                 $duplicates[] = $this->formatDuplicateMatch($match, $studentData);
             }
         }
 
         // Check previous school enrollment
+        $previousSchool = $studentData['schoolNameFrom'] ?? '';
         if (!empty($previousSchool)) {
-            $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, surname, firstName, dob, previousSchool,
+            $sql = "SELECT DISTINCT gibbonPerson.gibbonPersonID, surname, firstName, dob, schoolName1,
                            gibbonStudentEnrolment.gibbonSchoolYearID,
                            (SELECT name FROM gibbonSchoolYear WHERE gibbonSchoolYearID=gibbonStudentEnrolment.gibbonSchoolYearID) as schoolYear
                     FROM gibbonPerson 
-                    JOIN gibbonStudentEnrolment ON gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID 
-                    WHERE gibbonPerson.previousSchool=:previousSchool";
+                    LEFT JOIN gibbonStudentEnrolment ON (gibbonStudentEnrolment.gibbonPersonID=gibbonPerson.gibbonPersonID)
+                    WHERE gibbonPerson.schoolName1=:previousSchool";
             
             $result = $this->pdo->select($sql, ['previousSchool' => $previousSchool]);
             
-            if (!empty($result)) {
+            if ($result && $result->rowCount() > 0) {
                 foreach ($result as $match) {
-                    // Skip if already found by name/dob
-                    if (array_filter($duplicates, fn($d) => $d['gibbonPersonID'] == $match['gibbonPersonID'])) {
-                        continue;
-                    }
-                    
                     $duplicates[] = $this->formatDuplicateMatch($match, $studentData);
                 }
             }
         }
 
-        return $duplicates;
+        return array_unique($duplicates, SORT_REGULAR);
     }
 
     /**
@@ -123,26 +122,28 @@ class ImportProcessor
      */
     protected function formatDuplicateMatch(array $match, array $studentData): array
     {
-        // Create matchType string by comparing with import data
         $matchTypes = [];
-        if ($match['surname'] == ($studentData['surname'] ?? '') && $match['firstName'] == ($studentData['firstName'] ?? '')) {
-            $matchTypes[] = 'name';
+
+        if ($match['surname'] == ($studentData['personal']['surname'] ?? '')) {
+            $matchTypes[] = 'surname';
         }
-        if ($match['dob'] == ($studentData['dob'] ?? '')) {
+        if ($match['firstName'] == ($studentData['personal']['firstName'] ?? '')) {
+            $matchTypes[] = 'first name';
+        }
+        if ($match['dob'] == ($studentData['personal']['dob'] ?? '')) {
             $matchTypes[] = 'dob';
         }
-        if (!empty($match['previousSchool']) && $match['previousSchool'] == ($studentData['schoolNameFrom'] ?? '')) {
+        if (!empty($match['schoolName1']) && $match['schoolName1'] == ($studentData['schoolNameFrom'] ?? '')) {
             $matchTypes[] = 'previous school';
         }
 
         return [
-            'gibbonPersonID' => strval($match['gibbonPersonID']),
-            'firstName' => strval($match['firstName'] ?? ''),
-            'surname' => strval($match['surname'] ?? ''),
-            'name' => Format::name('', $match['firstName'] ?? '', $match['surname'] ?? '', 'Student', false, false),
-            'dob' => Format::date($match['dob'] ?? ''),
-            'matchType' => implode(',', $matchTypes),
-            'schoolYear' => strval($match['schoolYear'] ?? '')
+            'gibbonPersonID' => $match['gibbonPersonID'],
+            'name' => $match['firstName'].' '.$match['surname'],
+            'dob' => $match['dob'],
+            'schoolYear' => $match['schoolYear'] ?? '',
+            'matchTypes' => $matchTypes,
+            'matchCount' => count($matchTypes)
         ];
     }
 
@@ -158,18 +159,18 @@ class ImportProcessor
         $formatted = [];
         
         // Format personal information
-        $formatted['firstName'] = strval($studentData['firstName'] ?? '');
-        $formatted['surname'] = strval($studentData['surname'] ?? '');
-        $formatted['preferredName'] = strval($studentData['preferredName'] ?? '');
-        $formatted['officialName'] = strval($studentData['officialName'] ?? '');
-        $formatted['nameInCharacters'] = strval($studentData['nameInCharacters'] ?? '');
-        $formatted['dob'] = !empty($studentData['dob']) ? Format::date($studentData['dob']) : '';
-        $formatted['gender'] = strval($studentData['gender'] ?? '');
+        $formatted['firstName'] = strval($studentData['personal']['firstName'] ?? '');
+        $formatted['surname'] = strval($studentData['personal']['surname'] ?? '');
+        $formatted['preferredName'] = strval($studentData['personal']['preferredName'] ?? '');
+        $formatted['officialName'] = strval($studentData['personal']['officialName'] ?? '');
+        $formatted['nameInCharacters'] = strval($studentData['personal']['nameInCharacters'] ?? '');
+        $formatted['dob'] = !empty($studentData['personal']['dob']) ? Format::date($studentData['personal']['dob']) : '';
+        $formatted['gender'] = strval($studentData['personal']['gender'] ?? '');
         
         // Format contact information
-        $formatted['email'] = strval($studentData['email'] ?? '');
-        $formatted['phone'] = strval($studentData['phone'] ?? '');
-        $formatted['address'] = strval($studentData['address'] ?? '');
+        $formatted['email'] = strval($studentData['personal']['email'] ?? '');
+        $formatted['phone'] = strval($studentData['personal']['phone'] ?? '');
+        $formatted['address'] = strval($studentData['personal']['address'] ?? '');
         
         // Format school information
         $formatted['schoolNameFrom'] = strval($studentData['schoolNameFrom'] ?? '');
@@ -288,7 +289,7 @@ class ImportProcessor
         $duplicates = $this->checkDuplicates($studentData['personal']);
         if (!empty($duplicates)) {
             foreach ($duplicates as $duplicate) {
-                $warnings[] = __('Possible duplicate').': '.$duplicate['name'].' ('.__('matched by').' '.$duplicate['matchType'].')';
+                $warnings[] = __('Possible duplicate').': '.$duplicate['name'].' ('.__('matched by').' '.$duplicate['matchTypes'][0].')';
             }
         }
 
@@ -313,32 +314,85 @@ class ImportProcessor
         $warnings = [];
         $imported = 0;
 
-        // First run validation
-        $validation = $this->dryRun($studentData, $options);
-        if (!empty($validation['errors']) && !($options['ignoreErrors'] ?? false)) {
-            return [
-                'errors' => $validation['errors'],
-                'warnings' => $validation['warnings'],
-                'imported' => 0,
-                'status' => 'Failed'
-            ];
-        }
-
         try {
+            // Check if student already exists in the school
+            $sql = "SELECT p.*, sy.name as schoolYear, yg.name as yearGroup 
+                   FROM gibbonPerson AS p 
+                   JOIN gibbonStudentEnrolment AS se ON se.gibbonPersonID = p.gibbonPersonID 
+                   JOIN gibbonSchoolYear AS sy ON sy.gibbonSchoolYearID = se.gibbonSchoolYearID
+                   JOIN gibbonYearGroup AS yg ON yg.gibbonYearGroupID = se.gibbonYearGroupID
+                   WHERE p.surname = :surname 
+                   AND p.firstName = :firstName
+                   AND p.dob = :dob
+                   AND p.status = 'Full'
+                   AND sy.status = 'Current'";
+
+            $result = $this->pdo->select($sql, [
+                'surname' => $studentData['personal']['surname'],
+                'firstName' => $studentData['personal']['firstName'],
+                'dob' => $studentData['personal']['dob']
+            ]);
+
+            if ($result->rowCount() > 0) {
+                $existingStudent = $result->fetch();
+                throw new \Exception(sprintf(
+                    'This student already exists in the school. %s %s is currently enrolled in %s (%s). Please check existing student records before proceeding.',
+                    $existingStudent['firstName'],
+                    $existingStudent['surname'],
+                    $existingStudent['yearGroup'],
+                    $existingStudent['schoolYear']
+                ));
+            }
+
+            // Check if student was previously imported
+            $sql = "SELECT ti.*, p.title, p.preferredName, p.surname, p.username 
+                   FROM gibbonStudentTransferImport AS ti 
+                   JOIN gibbonPerson AS p ON p.gibbonPersonID = ti.gibbonPersonIDCreated 
+                   WHERE ti.status = 'Complete' 
+                   AND ti.studentData LIKE :searchKey";
+
+            $searchKey = '%"surname":"' . $studentData['personal']['surname'] . 
+                        '","firstName":"' . $studentData['personal']['firstName'] . 
+                        '","dob":"' . $studentData['personal']['dob'] . '"%';
+
+            $result = $this->pdo->select($sql, ['searchKey' => $searchKey]);
+
+            if ($result->rowCount() > 0) {
+                $previousImport = $result->fetch();
+                $staffName = Format::name($previousImport['title'], $previousImport['preferredName'], $previousImport['surname'], 'Staff');
+                throw new \Exception(sprintf(
+                    'This student appears to have already been imported by %s on %s. Please check the import history before proceeding.',
+                    $staffName,
+                    Format::date($previousImport['timestampCreated'])
+                ));
+            }
+
+            // First run validation
+            $validation = $this->dryRun($studentData, $options);
+            if (!empty($validation['errors']) && !($options['ignoreErrors'] ?? false)) {
+                return [
+                    'errors' => $validation['errors'],
+                    'warnings' => $validation['warnings'],
+                    'imported' => 0,
+                    'status' => 'Failed'
+                ];
+            }
+
             // Begin transaction
             $this->pdo->getConnection()->beginTransaction();
 
             // Get current school year
-            $sql = "SELECT gibbonSchoolYearID FROM gibbonSchoolYear WHERE status='Current'";
-            $currentSchoolYear = $this->pdo->selectOne($sql);
+            $sql = "SELECT gibbonSchoolYearID FROM gibbonSchoolYear WHERE status='Current' LIMIT 1";
+            $result = $this->pdo->select($sql);
             
-            if (empty($currentSchoolYear['gibbonSchoolYearID'])) {
-                throw new \Exception(__('Current school year could not be determined'));
+            if ($result->rowCount() != 1) {
+                throw new \Exception('Current school year could not be determined');
             }
+            $currentSchoolYear = $result->fetch();
 
-            // Create application form
+            // Create application form record
             $data = [
-                'gibbonSchoolYearID' => $currentSchoolYear['gibbonSchoolYearID'],
+                'gibbonSchoolYearIDEntry' => $currentSchoolYear['gibbonSchoolYearID'],
                 'surname' => $studentData['personal']['surname'],
                 'firstName' => $studentData['personal']['firstName'],
                 'preferredName' => $studentData['personal']['preferredName'] ?? $studentData['personal']['firstName'],
@@ -350,70 +404,72 @@ class ImportProcessor
                 'phone1' => $studentData['personal']['phone1'] ?? '',
                 'phone2' => $studentData['personal']['phone2'] ?? '',
                 'countryOfBirth' => $studentData['personal']['countryOfBirth'] ?? '',
-                'citizenship1' => $studentData['personal']['citizenship1'] ?? '',
-                'citizenship2' => $studentData['personal']['citizenship2'] ?? '',
-                'transport' => 'N',
-                'schoolDate' => date('Y-m-d'),
                 'dateStart' => $studentData['academic']['dateStart'] ?? '',
-                'gibbonYearGroupID' => $studentData['academic']['yearGroup']['id'],
+                'gibbonYearGroupIDEntry' => $studentData['academic']['yearGroup']['id'],
                 'gibbonFormGroupID' => $studentData['academic']['formGroup']['id'] ?? null,
-                'previousSchool' => $studentData['schoolNameFrom'] ?? '',
+                'schoolName1' => $studentData['schoolNameFrom'] ?? '',
+                'schoolAddress1' => $studentData['schoolAddressFrom'] ?? '',
                 'status' => 'Pending',
                 'priority' => '0',
                 'milestones' => 'Transfer Import '.date('Y-m-d H:i:s')
             ];
 
+            // Add parent 1 information
+            if (!empty($studentData['family']['parent1'])) {
+                $data['parent1title'] = $studentData['family']['parent1']['title'] ?? '';
+                $data['parent1surname'] = $studentData['family']['parent1']['surname'] ?? '';
+                $data['parent1firstName'] = $studentData['family']['parent1']['firstName'] ?? '';
+                $data['parent1preferredName'] = $studentData['family']['parent1']['preferredName'] ?? '';
+                $data['parent1officialName'] = $studentData['family']['parent1']['officialName'] ?? '';
+                $data['parent1nameInCharacters'] = $studentData['family']['parent1']['nameInCharacters'] ?? '';
+                $data['parent1gender'] = $studentData['family']['parent1']['gender'] ?? '';
+                $data['parent1relationship'] = $studentData['family']['parent1']['relationship'] ?? '';
+                $data['parent1languageFirst'] = $studentData['family']['parent1']['languageFirst'] ?? '';
+                $data['parent1languageSecond'] = $studentData['family']['parent1']['languageSecond'] ?? '';
+                $data['parent1email'] = $studentData['family']['parent1']['email'] ?? '';
+                $data['parent1phone1'] = $studentData['family']['parent1']['phone1'] ?? '';
+                $data['parent1phone2'] = $studentData['family']['parent1']['phone2'] ?? '';
+                $data['parent1profession'] = $studentData['family']['parent1']['profession'] ?? '';
+                $data['parent1employer'] = $studentData['family']['parent1']['employer'] ?? '';
+            }
+
+            // Add parent 2 information
+            if (!empty($studentData['family']['parent2'])) {
+                $data['parent2title'] = $studentData['family']['parent2']['title'] ?? '';
+                $data['parent2surname'] = $studentData['family']['parent2']['surname'] ?? '';
+                $data['parent2firstName'] = $studentData['family']['parent2']['firstName'] ?? '';
+                $data['parent2preferredName'] = $studentData['family']['parent2']['preferredName'] ?? '';
+                $data['parent2officialName'] = $studentData['family']['parent2']['officialName'] ?? '';
+                $data['parent2nameInCharacters'] = $studentData['family']['parent2']['nameInCharacters'] ?? '';
+                $data['parent2gender'] = $studentData['family']['parent2']['gender'] ?? '';
+                $data['parent2relationship'] = $studentData['family']['parent2']['relationship'] ?? '';
+                $data['parent2languageFirst'] = $studentData['family']['parent2']['languageFirst'] ?? '';
+                $data['parent2languageSecond'] = $studentData['family']['parent2']['languageSecond'] ?? '';
+                $data['parent2email'] = $studentData['family']['parent2']['email'] ?? '';
+                $data['parent2phone1'] = $studentData['family']['parent2']['phone1'] ?? '';
+                $data['parent2phone2'] = $studentData['family']['parent2']['phone2'] ?? '';
+                $data['parent2profession'] = $studentData['family']['parent2']['profession'] ?? '';
+                $data['parent2employer'] = $studentData['family']['parent2']['employer'] ?? '';
+            }
+
+            // Add medical information if available
+            if (!empty($studentData['medical']['conditions'])) {
+                $data['medicalInformation'] = implode("\n", array_map(function($condition) {
+                    return $condition['name'] . ': ' . ($condition['details'] ?? 'No details provided');
+                }, $studentData['medical']['conditions']));
+            }
+
             $fields = implode(',', array_keys($data));
             $values = ':'.implode(',:', array_keys($data));
             $sql = "INSERT INTO gibbonApplicationForm ($fields) VALUES ($values)";
-            $inserted = $this->pdo->insert($sql, $data);
+            
+            $result = $this->pdo->insert($sql, $data);
 
-            if (!$inserted) {
+            if (!$result) {
                 throw new \Exception(__('Failed to create application form'));
             }
 
             $applicationFormID = $this->pdo->getConnection()->lastInsertID();
-
-            // Add medical conditions
-            if (!empty($studentData['medical']['conditions'])) {
-                foreach ($studentData['medical']['conditions'] as $condition) {
-                    $medicalData = [
-                        'gibbonApplicationFormID' => $applicationFormID,
-                        'name' => $condition,
-                        'alertLevel' => 'Low'
-                    ];
-                    
-                    $fields = implode(',', array_keys($medicalData));
-                    $values = ':'.implode(',:', array_keys($medicalData));
-                    $sql = "INSERT INTO gibbonApplicationFormMedical ($fields) VALUES ($values)";
-                    $this->pdo->insert($sql, $medicalData);
-                }
-            }
-
-            // Add family members
-            if (!empty($studentData['family'])) {
-                foreach ($studentData['family'] as $member) {
-                    if (empty($member['adult']['email'])) continue;
-
-                    $familyData = [
-                        'gibbonApplicationFormID' => $applicationFormID,
-                        'title' => $member['adult']['title'] ?? '',
-                        'surname' => $member['adult']['surname'] ?? '',
-                        'firstName' => $member['adult']['preferredName'] ?? '',
-                        'relationship' => $member['relationship'] ?? '',
-                        'phone' => $member['adult']['phone1'] ?? '',
-                        'email' => $member['adult']['email'],
-                        'address' => $member['homeAddress'] ?? '',
-                        'languageFirst' => $member['languageHomePrimary'] ?? '',
-                        'languageSecond' => $member['languageHomeSecondary'] ?? ''
-                    ];
-
-                    $fields = implode(',', array_keys($familyData));
-                    $values = ':'.implode(',:', array_keys($familyData));
-                    $sql = "INSERT INTO gibbonApplicationFormFamily ($fields) VALUES ($values)";
-                    $this->pdo->insert($sql, $familyData);
-                }
-            }
 
             // Process attachments if any
             if (!empty($studentData['attachments'])) {
@@ -507,12 +563,13 @@ class ImportProcessor
 
             // Create application form record
             $data = [
-                'gibbonSchoolYearID' => $this->settingGateway->getSettingByScope('System', 'gibbonSchoolYearIDCurrent'),
+                'gibbonSchoolYearIDEntry' => $this->settingGateway->getSettingByScope('System', 'gibbonSchoolYearIDCurrent'),
                 'surname' => strval($studentData['personal']['surname']),
                 'firstName' => strval($studentData['personal']['firstName']),
                 'dob' => strval($studentData['personal']['dob']),
                 'email' => strval($studentData['personal']['email']),
-                'schoolName' => strval($studentData['academic']['previousSchools'][0]['name'] ?? ''),
+                'schoolName1' => strval($studentData['academic']['previousSchools'][0]['name'] ?? ''),
+                'schoolAddress1' => strval($studentData['academic']['previousSchools'][0]['address'] ?? ''),
                 'dateStart' => date('Y-m-d'),
                 'gibbonYearGroupIDEntry' => strval($studentData['academic']['yearGroup']),
                 'studentTransferImportID' => strval($studentTransferImportID),
@@ -520,15 +577,42 @@ class ImportProcessor
                 'timestamp' => date('Y-m-d H:i:s')
             ];
 
-            $fields = implode(',', array_keys($data));
-            $values = ':'.implode(',:', array_keys($data));
-            $sql = "INSERT INTO gibbonApplicationForm ($fields) VALUES ($values)";
-            
-            $result = $this->pdo->insert($sql, $data);
+            // Add parent 1 information
+            if (!empty($studentData['family']['parent1'])) {
+                $data['parent1title'] = $studentData['family']['parent1']['title'] ?? '';
+                $data['parent1surname'] = $studentData['family']['parent1']['surname'] ?? '';
+                $data['parent1firstName'] = $studentData['family']['parent1']['firstName'] ?? '';
+                $data['parent1preferredName'] = $studentData['family']['parent1']['preferredName'] ?? '';
+                $data['parent1officialName'] = $studentData['family']['parent1']['officialName'] ?? '';
+                $data['parent1nameInCharacters'] = $studentData['family']['parent1']['nameInCharacters'] ?? '';
+                $data['parent1gender'] = $studentData['family']['parent1']['gender'] ?? '';
+                $data['parent1relationship'] = $studentData['family']['parent1']['relationship'] ?? '';
+                $data['parent1languageFirst'] = $studentData['family']['parent1']['languageFirst'] ?? '';
+                $data['parent1languageSecond'] = $studentData['family']['parent1']['languageSecond'] ?? '';
+                $data['parent1email'] = $studentData['family']['parent1']['email'] ?? '';
+                $data['parent1phone1'] = $studentData['family']['parent1']['phone1'] ?? '';
+                $data['parent1phone2'] = $studentData['family']['parent1']['phone2'] ?? '';
+                $data['parent1profession'] = $studentData['family']['parent1']['profession'] ?? '';
+                $data['parent1employer'] = $studentData['family']['parent1']['employer'] ?? '';
+            }
 
-            $applicationFormID = $this->pdo->getConnection()->lastInsertID();
-            if (empty($applicationFormID)) {
-                throw new \Exception('Failed to create application form');
+            // Add parent 2 information
+            if (!empty($studentData['family']['parent2'])) {
+                $data['parent2title'] = $studentData['family']['parent2']['title'] ?? '';
+                $data['parent2surname'] = $studentData['family']['parent2']['surname'] ?? '';
+                $data['parent2firstName'] = $studentData['family']['parent2']['firstName'] ?? '';
+                $data['parent2preferredName'] = $studentData['family']['parent2']['preferredName'] ?? '';
+                $data['parent2officialName'] = $studentData['family']['parent2']['officialName'] ?? '';
+                $data['parent2nameInCharacters'] = $studentData['family']['parent2']['nameInCharacters'] ?? '';
+                $data['parent2gender'] = $studentData['family']['parent2']['gender'] ?? '';
+                $data['parent2relationship'] = $studentData['family']['parent2']['relationship'] ?? '';
+                $data['parent2languageFirst'] = $studentData['family']['parent2']['languageFirst'] ?? '';
+                $data['parent2languageSecond'] = $studentData['family']['parent2']['languageSecond'] ?? '';
+                $data['parent2email'] = $studentData['family']['parent2']['email'] ?? '';
+                $data['parent2phone1'] = $studentData['family']['parent2']['phone1'] ?? '';
+                $data['parent2phone2'] = $studentData['family']['parent2']['phone2'] ?? '';
+                $data['parent2profession'] = $studentData['family']['parent2']['profession'] ?? '';
+                $data['parent2employer'] = $studentData['family']['parent2']['employer'] ?? '';
             }
 
             // Process medical conditions
@@ -550,27 +634,15 @@ class ImportProcessor
                 }
             }
 
-            // Process family members
-            if (!empty($studentData['family'])) {
-                foreach ($studentData['family'] as $member) {
-                    if (empty($member['adult']['email'])) continue;
-                    
-                    $familyData = [
-                        'gibbonApplicationFormID' => $applicationFormID,
-                        'title' => strval($member['adult']['title']),
-                        'surname' => strval($member['adult']['surname']),
-                        'firstName' => strval($member['adult']['firstName']),
-                        'relation' => strval($member['relation']),
-                        'phone' => strval($member['adult']['phone'] ?? ''),
-                        'email' => strval($member['adult']['email'])
-                    ];
+            $fields = implode(',', array_keys($data));
+            $values = ':'.implode(',:', array_keys($data));
+            $sql = "INSERT INTO gibbonApplicationForm ($fields) VALUES ($values)";
+            
+            $result = $this->pdo->insert($sql, $data);
 
-                    $fields = implode(',', array_keys($familyData));
-                    $values = ':'.implode(',:', array_keys($familyData));
-                    $sql = "INSERT INTO gibbonApplicationFormFamily ($fields) VALUES ($values)";
-                    
-                    $this->pdo->insert($sql, $familyData);
-                }
+            $applicationFormID = $this->pdo->getConnection()->lastInsertID();
+            if (empty($applicationFormID)) {
+                throw new \Exception('Failed to create application form');
             }
 
             $this->pdo->getConnection()->commit();
@@ -618,7 +690,7 @@ class ImportProcessor
         }
 
         // Validate public key format (should be PEM format)
-        if (!str_contains($metadata['publicKey'], '-----BEGIN PUBLIC KEY-----')) {
+        if (strpos($metadata['publicKey'], '-----BEGIN PUBLIC KEY-----') === false) {
             throw new \RuntimeException('Invalid metadata: incorrect public key format');
         }
     }

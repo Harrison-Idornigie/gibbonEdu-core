@@ -8,7 +8,7 @@ Copyright 2010, Gibbon Foundation
 use Gibbon\Tables\DataTable;
 use Gibbon\Services\Format;
 use Gibbon\Domain\DataSet;
-use Gibbon\Module\StudentTransfer\Domain\TransferGateway;
+use Gibbon\Module\StudentTransfer\Domain\TransferImportGateway;
 
 if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_import_manage.php") == false) {
     // Access denied
@@ -25,13 +25,19 @@ if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_i
     echo "</a>";
     echo "</div>";
 
-    $transferGateway = $container->get(TransferGateway::class);
+    $transferImportGateway = $container->get(TransferImportGateway::class);
 
-    $criteria = $transferGateway->newQueryCriteria()
+    // Get user data for display
+    $sql = "SELECT gibbonPerson.gibbonPersonID, gibbonPerson.title, gibbonPerson.surname, gibbonPerson.preferredName 
+            FROM gibbonPerson 
+            WHERE status='Full'";
+    $users = $pdo->select($sql)->fetchAll(\PDO::FETCH_GROUP|\PDO::FETCH_UNIQUE);
+
+    $criteria = $transferImportGateway->newQueryCriteria()
         ->sortBy(['timestampCreated'], 'DESC')
         ->fromPOST();
 
-    $transfers = $transferGateway->queryTransfers($criteria);
+    $imports = $transferImportGateway->queryImports($criteria);
 
     $table = DataTable::create('studentImports');
     $table->setTitle(__('Student Imports'));
@@ -42,22 +48,23 @@ if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_i
         });
 
     $table->addColumn('user', __('User'))
-        ->format(function($values) {
-            return Format::name('', $values['preferredName'], $values['surname'], 'Staff', false, true);
+        ->format(function($values) use ($users) {
+            $user = $users[$values['gibbonPersonIDCreated']] ?? [];
+            return Format::name('', $user['preferredName'] ?? '', $user['surname'] ?? '', 'Staff', false, true);
         });
 
     $table->addColumn('schoolNameFrom', __('From School'));
 
-    $table->addColumn('studentName', __('Student'))
+    $table->addColumn('student', __('Student'))
         ->format(function($values) {
-            if (empty($values['importProgress'])) return '';
-            $progress = json_decode($values['importProgress'], true);
-            return $progress['metadata']['studentName'] ?? '';
+            if (empty($values['studentData'])) return '';
+            $data = json_decode($values['studentData'], true);
+            return Format::name('', $data['personal']['firstName'], $data['personal']['surname'], 'Student', false, true);
         });
 
     $table->addColumn('status', __('Status'))
         ->format(function($values) {
-            if ($values['status'] == 'Imported') {
+            if ($values['status'] == 'Complete') {
                 return Format::tag(__('Success'), 'success');
             } else if ($values['status'] == 'Failed') {
                 return Format::tag(__('Failed'), 'error');
@@ -71,20 +78,16 @@ if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_i
             if (empty($values['importProgress'])) return '';
             
             $progress = json_decode($values['importProgress'], true);
-            if (empty($progress['steps'])) return '';
-
             $html = '<div class="flex flex-col gap-1">';
-            foreach ($progress['steps'] as $step => $info) {
-                $icon = $info['status'] == 'success' ? '✓' : ($info['status'] == 'error' ? '✗' : '○');
-                $color = $info['status'] == 'success' ? 'text-green-600' : ($info['status'] == 'error' ? 'text-red-600' : 'text-gray-600');
-                $html .= '<div class="text-xs '.$color.'">'.$icon.' '.ucfirst($step).'</div>';
-            }
+            $html .= '<div class="text-xs '.($progress['status'] == 'Complete' ? 'text-green-600' : 'text-gray-600').'">';
+            $html .= ($progress['status'] == 'Complete' ? '✓' : '○').' '.$progress['stage'];
+            $html .= '</div>';
             $html .= '</div>';
             return $html;
         });
 
     $table->addActionColumn()
-        ->addParam('studentTransferImportID')
+        ->addParam('gibbonStudentTransferImportID')
         ->format(function($values, $actions) {
             $actions->addAction('view', __('View'))
                 ->setURL('/modules/Student Transfer/student_import_history_view.php')
@@ -102,5 +105,5 @@ if (isActionAccessible($guid, $connection2, "/modules/Student Transfer/student_i
             }
         });
 
-    echo $table->render($transfers);
+    echo $table->render($imports);
 }

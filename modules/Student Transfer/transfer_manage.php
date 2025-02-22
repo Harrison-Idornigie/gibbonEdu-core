@@ -80,11 +80,20 @@ $row->addSearchSubmit($session, __('Clear Search'));
 
 echo $form->getOutput();
 
+
+
 // Setup data table
 $table = DataTable::create('studentTransfers');
 $table->setTitle(__('Student Transfers'));
 $table->setDescription(__('View and manage student transfers between schools.'));
 $table->addMetaData('gibbonSchoolYearID', $gibbonSchoolYearID);
+
+ // Add create transfer button
+echo "<div class='mt-4 ml-auto'>";
+echo "<a href='".$session->get('absoluteURL')."/index.php?q=/modules/Student Transfer/transfer_manage_add.php' class='button'>";
+echo __('Create New Transfer');
+echo "</a>";
+echo "</div>";
 
 // Add bulk actions if batch transfers enabled
 if ($session->get('isAdmin') && $settingGateway->getSettingByScope('Student Transfer', 'enableBatchTransfers') == 'Y') {
@@ -97,6 +106,8 @@ if ($session->get('isAdmin') && $settingGateway->getSettingByScope('Student Tran
         ->setIcon('attendance')
         ->displayLabel();
 }
+
+
 
 // Add columns
 $table->addColumn('student', __('Student'))
@@ -202,9 +213,4 @@ $criteria = $transferGateway->newQueryCriteria()
 $transfers = $transferGateway->queryTransfers($criteria, $gibbonSchoolYearID);
 echo $table->render($transfers);
 
-// Add create transfer button
-echo "<div class='mt-4'>";
-echo "<a href='".$session->get('absoluteURL')."/index.php?q=/modules/Student Transfer/transfer_manage_add.php' class='button'>";
-echo __('Create New Transfer');
-echo "</a>";
-echo "</div>";
+ 

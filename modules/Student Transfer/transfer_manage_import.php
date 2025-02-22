@@ -49,7 +49,12 @@ $steps = [
 // Display the step progress bar
 echo '<ul class="flex justify-between w-full p-4 mb-8 bg-white rounded shadow steps">';
 foreach ($steps as $stepNum => $stepName) {
-    $stepClass = 'step ' . ($stepNum <= $step ? 'active' : '');
+    $stepClass = 'step';
+    if ($stepNum < $step) {
+        $stepClass .= ' completed'; // Previous steps
+    } elseif ($stepNum == $step) {
+        $stepClass .= ' active'; // Current step
+    }
     printf('<li class="%s">%s</li>', $stepClass, $stepName);
 }
 echo '</ul>';
