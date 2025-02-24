@@ -1,0 +1,32 @@
+{
+    "demographics": {
+        "StaffID": "staffID",
+        "Title": "title",
+        "FirstName": "firstName",
+        "LastName": "surname",
+        "PreferredName": "preferredName",
+        "OfficialName": "officialName",
+        "DateOfBirth": "dateStart",
+        "Gender": "gender",
+        "Email": "email"
+    },
+    "contact": {
+        "Phone1": "phone1",
+        "Phone2": "phone2",
+        "Address1": "address1",
+        "Address1District": "address1District",
+        "Address1Country": "address1Country",
+        "Address1PostalCode": "address1PostalCode"
+    },
+    "professional": {
+        "JobTitle": "jobTitle",
+        "Department": "gibbonDepartmentID"
+    },
+    "required": [
+        "FirstName",
+        "LastName",
+        "Gender",
+        "DateOfBirth",
+        "Email"
+    ]
+}

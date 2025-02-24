@@ -1,0 +1,129 @@
+{
+    "name": "SKCT Student Import",
+    "description": "Maps SKCT student data to Gibbon application form fields",
+    "source": "students_skct.csv",
+    "target": "studentApplicationForm",
+    "fieldMappings": {
+        "surname": {
+            "sourceField": "lastname",
+            "required": true
+        },
+        "firstName": {
+            "sourceField": "firstname",
+            "required": true
+        },
+        "preferredName": {
+            "sourceField": "alias_firstname",
+            "fallback": "firstname",
+            "required": true
+        },
+        "officialName": {
+            "sourceField": ["firstname", "lastname"],
+            "transform": "concat",
+            "separator": " "
+        },
+        "gender": {
+            "sourceField": "sex",
+            "transform": {
+                "M": "M",
+                "F": "F"
+            },
+            "required": true
+        },
+        "dob": {
+            "sourceField": "birthdate",
+            "transform": "date",
+            "format": "Y-m-d"
+        },
+        "email": {
+            "sourceField": "email"
+        },
+        "homeAddress": {
+            "sourceField": "address1"
+        },
+        "homeAddressDistrict": {
+            "sourceField": "city1"
+        },
+        "homeAddressCountry": {
+            "value": "Canada"
+        },
+        "parent1title": {
+            "value": "Mr./Mrs."
+        },
+        "parent1surname": {
+            "sourceField": "par1_lastname"
+        },
+        "parent1firstName": {
+            "sourceField": "par1_firstname"
+        },
+        "parent1relationship": {
+            "sourceField": "relation1"
+        },
+        "parent1phone1": {
+            "sourceField": "hphone1"
+        },
+        "parent1phone2": {
+            "sourceField": "cell1"
+        },
+        "parent1email": {
+            "sourceField": "par1_email"
+        },
+        "parent2title": {
+            "value": "Mr./Mrs."
+        },
+        "parent2surname": {
+            "sourceField": "par2_lastname"
+        },
+        "parent2firstName": {
+            "sourceField": "par2_firstname"
+        },
+        "parent2relationship": {
+            "sourceField": "relation2"
+        },
+        "parent2phone1": {
+            "sourceField": "hphone2"
+        },
+        "parent2phone2": {
+            "sourceField": "cell2"
+        },
+        "parent2email": {
+            "sourceField": "par2_email"
+        },
+        "medicalInformation": {
+            "sourceField": "medical"
+        },
+        "dateStart": {
+            "value": "2024-08-15"
+        },
+        "schoolName1": {
+            "value": "SKCT"
+        },
+        "gibbonSchoolYearIDEntry": {
+            "value": "2024-2025"
+        },
+        "gibbonYearGroupIDEntry": {
+            "sourceField": "grade",
+            "transform": {
+                "12": "12",
+                "11": "11",
+                "10": "10",
+                "9": "09",
+                "8": "08",
+                "7": "07",
+                "6": "06",
+                "5": "05",
+                "4": "04",
+                "3": "03",
+                "2": "02",
+                "1": "01"
+            }
+        }
+    },
+    "options": {
+        "skipFirstRow": true,
+        "delimiter": ",",
+        "enclosure": "\"",
+        "validateData": true,
+        "dryRun": false
+    }
+}

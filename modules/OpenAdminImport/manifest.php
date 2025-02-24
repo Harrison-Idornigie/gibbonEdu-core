@@ -67,6 +67,16 @@ $moduleTables[] = "CREATE TABLE `oafsFieldMapping` (
     CONSTRAINT `oafsFieldMapping_ibfk_1` FOREIGN KEY (`gibbonPersonIDCreated`) REFERENCES `gibbonPerson` (`gibbonPersonID`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
 
+$moduleTables[] = "CREATE TABLE `oafsMappingPreset` (
+    `oafsMappingPresetID` int(10) unsigned NOT NULL AUTO_INCREMENT,
+    `importType` varchar(50) NOT NULL,
+    `mappingData` text NOT NULL,
+    `version` varchar(10) NOT NULL,
+    `timestampCreated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`oafsMappingPresetID`),
+    UNIQUE KEY `unique_preset` (`importType`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;";
+
 // Module settings
 $gibbonSetting = [];
 $gibbonSetting[] = "INSERT INTO `gibbonSetting` 
@@ -75,6 +85,16 @@ $gibbonSetting[] = "INSERT INTO `gibbonSetting`
     ('OpenAdminImport', 'csvDelimiter', 'CSV Delimiter', 'Default delimiter for CSV files', ','),
     ('OpenAdminImport', 'csvEncoding', 'CSV Encoding', 'Default encoding for CSV files', 'UTF-8'),
     ('OpenAdminImport', 'batchSize', 'Batch Size', 'Number of records to process in each batch', '100');";
+
+// Insert default mapping presets
+$studentMappings = file_get_contents(__DIR__ . '/src/Mappings/students_mappings.json');
+$staffMappings = file_get_contents(__DIR__ . '/src/Mappings/staff_mappings.json');
+
+$gibbonSetting[] = "INSERT INTO `oafsMappingPreset` 
+    (`importType`, `mappingData`, `version`) 
+    VALUES 
+    ('student', '" . addslashes($studentMappings) . "', '$version'),
+    ('staff', '" . addslashes($staffMappings) . "', '$version');";
 
 // Module actions
 $actionRows = [];

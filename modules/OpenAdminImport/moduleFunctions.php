@@ -385,3 +385,181 @@ function getFieldMappings($connection2, $importType)
         return [];
     }
 }
+
+/**
+ * Get module setting from database
+ * 
+ * @param PDO $connection Database connection
+ * @param string $name Setting name
+ * @param string $default Default value if setting not found
+ * @return string Setting value
+ */
+function getModuleSetting($connection, $name, $default = '')
+{
+    try {
+        $data = ['scope' => 'OpenAdminImport', 'name' => $name];
+        $sql = "SELECT value FROM gibbonSetting WHERE scope=:scope AND name=:name";
+        $result = $connection->prepare($sql);
+        $result->execute($data);
+        
+        return $result->fetchColumn() ?: $default;
+    } catch (Exception $e) {
+        return $default;
+    }
+}
+
+/**
+ * Process a single CSV import file
+ * 
+ * @param PDO $connection Database connection
+ * @param string $importType Type of import (staff/student)
+ * @param array $fileInfo File information array from $_FILES
+ * @param array $options Import options
+ * @return array Results with success/error counts and messages
+ */
+function processSingleImport($connection, $importType, $fileInfo, $options = [])
+{
+    $results = [
+        'success' => 0,
+        'errors' => 0,
+        'messages' => []
+    ];
+
+    try {
+        // Get field mappings
+        $mappings = getFieldMappings($connection, $importType);
+        if (empty($mappings)) {
+            $mappings = getDefaultFieldMappings($importType);
+        }
+
+        // Get file path
+        $filePath = $fileInfo['tmp_name'] ?? '';
+
+        // Validate file exists and is readable
+        if (!is_string($filePath) || !file_exists($filePath) || !is_readable($filePath)) {
+            $results['errors']++;
+            $results['messages'][] = __('File not found or not readable');
+            return $results;
+        }
+
+        // Read CSV with UTF-8 encoding
+        $handle = fopen($filePath, 'r');
+        if ($handle === false) {
+            $results['errors']++;
+            $results['messages'][] = __('Could not open file for reading');
+            return $results;
+        }
+
+        // Get CSV settings
+        $delimiter = getModuleSetting($connection, 'csvDelimiter', ',');
+        $encoding = getModuleSetting($connection, 'csvEncoding', 'UTF-8');
+        $batchSize = intval(getModuleSetting($connection, 'batchSize', '100'));
+
+        // Read headers
+        $headers = fgetcsv($handle, 0, $delimiter);
+        if (!$headers) {
+            $results['errors']++;
+            $results['messages'][] = __('Could not read CSV headers');
+            return $results;
+        }
+
+        // Validate required fields
+        $missingFields = [];
+        foreach ($mappings as $source => $details) {
+            if ($details['required'] === 'Y' && !in_array($source, $headers)) {
+                $missingFields[] = $source;
+            }
+        }
+
+        if (!empty($missingFields)) {
+            $results['errors']++;
+            $results['messages'][] = sprintf(__('Missing required fields: %s'), implode(', ', $missingFields));
+            return $results;
+        }
+
+        // Process records
+        $row = 2; // Start at 2 to account for header row
+        $batch = [];
+        
+        while (($data = fgetcsv($handle, 0, $delimiter)) !== false) {
+            // Skip empty rows
+            if (empty(array_filter($data))) {
+                continue;
+            }
+
+            // Map CSV data to Gibbon fields
+            $record = [];
+            foreach ($headers as $index => $header) {
+                if (isset($mappings[$header])) {
+                    $value = $data[$index] ?? $mappings[$header]['default'] ?? '';
+                    $record[$mappings[$header]['target']] = $value;
+                }
+            }
+
+            // Add required constants
+            $record['type'] = $importType === 'staff' ? 'Staff' : 'Student';
+            $record['status'] = 'Full';
+            $record['canLogin'] = 'Y';
+            $record['passwordForceReset'] = 'Y';
+
+            try {
+                // Skip actual database operations if dry run
+                if (!empty($options['dryRun'])) {
+                    $results['success']++;
+                    continue;
+                }
+
+                // Begin transaction
+                $connection->beginTransaction();
+
+                // Insert person record
+                $sql = "INSERT INTO gibbonPerson 
+                        (" . implode(', ', array_keys($record)) . ") 
+                        VALUES 
+                        (:" . implode(', :', array_keys($record)) . ")";
+                
+                $insert = $connection->prepare($sql);
+                $insert->execute($record);
+
+                // Get the new person ID
+                $gibbonPersonID = $connection->lastInsertId();
+
+                // Add role
+                $roleSQL = "INSERT INTO gibbonRole_gibbonPerson 
+                           (gibbonRoleID, gibbonPersonID) 
+                           VALUES 
+                           (:gibbonRoleID, :gibbonPersonID)";
+                
+                $roleInsert = $connection->prepare($roleSQL);
+                $roleInsert->execute([
+                    'gibbonRoleID' => $importType === 'staff' ? '002' : '003', // Staff = 002, Student = 003
+                    'gibbonPersonID' => $gibbonPersonID
+                ]);
+
+                // Commit transaction
+                $connection->commit();
+                $results['success']++;
+                
+            } catch (Exception $e) {
+                $connection->rollBack();
+                $results['errors']++;
+                $results['messages'][] = sprintf(__('Row %d: %s'), $row, $e->getMessage());
+                
+                // Stop on error if not continuing
+                if (empty($options['continueOnError'])) {
+                    break;
+                }
+            }
+
+            $row++;
+        }
+
+        fclose($handle);
+
+    } catch (Exception $e) {
+        $results['errors']++;
+        $results['messages'][] = $e->getMessage();
+    }
+
+    return $results;
+}
